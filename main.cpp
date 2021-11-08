@@ -6,7 +6,7 @@
 class bwt_cmp_reverse {
     const std::vector<unsigned char> &data;
 public:
-    bwt_cmp_reverse(const std::vector<unsigned char> &bwt_data) : data(bwt_data) {}
+    explicit bwt_cmp_reverse(const std::vector<unsigned char> &bwt_data) : data(bwt_data) {}
 
     bool operator()(size_t left, size_t right) {
         return data[left] < data[right];
@@ -16,7 +16,7 @@ public:
 class bwt_cmp_straight {
     const std::vector<unsigned char> &data;
 public:
-    bwt_cmp_straight(const std::vector<unsigned char> &bwt_data) : data(bwt_data) {}
+    explicit bwt_cmp_straight(const std::vector<unsigned char> &bwt_data) : data(bwt_data) {}
 
     bool operator()(size_t left, size_t right) {
         size_t i = 0;
@@ -42,7 +42,7 @@ std::vector<unsigned char> bwt_reverse(const std::vector<unsigned char> &bwt_dat
 
 void write_bytes(const std::string &file_name, std::vector<unsigned char> &data) {
     std::ofstream fout(file_name, std::ios::binary);
-    fout.write(reinterpret_cast<const char *>(data.data()), data.size());
+    fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
 }
 
 std::vector<unsigned char> read_bytes(const std::string &file_name) {
@@ -93,7 +93,6 @@ int main() {
 
 
     std::string dir = "calgarycorpus/";
-    std::string work_dir = "calgarycorpus/";
 
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
                                           "pic", "progc", "progl", "progp", "trans"};
@@ -106,9 +105,11 @@ int main() {
     for (auto &current_file : file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
-        std::string initial_file_name = dir + current_file;
-        std::string encoded_file_name = work_dir + current_file + encoding_suffix;
-        std::string decoded_file_name = work_dir + current_file + decoding_suffix;
+
+        std::string initial_file_name, encoded_file_name, decoded_file_name;
+        initial_file_name.append(dir + current_file);
+        encoded_file_name.append(dir).append(current_file + encoding_suffix);
+        decoded_file_name.append(dir).append(current_file + decoding_suffix);
 
         auto bytes_input = read_bytes(initial_file_name);
         auto bwt_result = bwt(bytes_input);
