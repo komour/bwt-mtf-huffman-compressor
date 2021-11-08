@@ -40,15 +40,28 @@ std::vector<unsigned char> bwt_reverse(const std::vector<unsigned char> &bwt_dat
     return initial_data;
 }
 
-void write_bytes(const std::string &file_name, std::vector<unsigned char> &data) {
+void write_bytes(const std::string &file_name, std::vector<unsigned char> &data, size_t bwt_shift_position = SIZE_MAX) {
     std::ofstream fout(file_name, std::ios::binary);
+    if (bwt_shift_position != SIZE_MAX) {
+        fout.write(reinterpret_cast<const char *>(&bwt_shift_position), sizeof(size_t));
+    }
     fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
+    fout.close();
 }
 
-std::vector<unsigned char> read_bytes(const std::string &file_name) {
-    std::ifstream fin_encoded(file_name, std::ios::binary);
-    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin_encoded)), {});
-    return bytes;
+std::pair<size_t, std::vector<unsigned char>> read_bytes(const std::string &file_name, bool read_index = false) {
+    std::ifstream fin(file_name, std::ios::binary);
+    std::pair<size_t, std::vector<unsigned char>> input_result;
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
+    if (read_index) {
+        input_result.first = *((std::size_t *)bytes.data());
+        input_result.second = std::vector(bytes.begin() + sizeof(size_t), bytes.end());
+    } else {
+        input_result.first = SIZE_MAX;
+        input_result.second = bytes;
+    }
+    fin.close();
+    return input_result;
 }
 
 std::pair<size_t, std::vector<unsigned char>> bwt(std::vector<unsigned char> data) {
@@ -89,20 +102,33 @@ bool compare_files(const std::string &p1, const std::string &p2) {
                       std::istreambuf_iterator<char>(f2.rdbuf()));
 }
 
+
+void compress(std::string &initial_file_name, std::string &encoded_file_name) {
+    auto bytes_input = read_bytes(initial_file_name).second;
+    auto bwt_result = bwt(bytes_input);
+    auto bwt_data = bwt_result.second;
+    auto bwt_shift_position = bwt_result.first;
+    write_bytes(encoded_file_name, bwt_data, bwt_shift_position);
+}
+
+void decompress(std::string &encoded_file_name, std::string &decoded_file_name) {
+    auto result_input = read_bytes(encoded_file_name, true);
+    auto encoded_bytes_input = result_input.second;
+    size_t bwt_shift_position = result_input.first;
+    auto decoded_data = bwt_reverse(encoded_bytes_input, bwt_shift_position);
+    write_bytes(decoded_file_name, decoded_data);
+}
+
+
 int main() {
-
-
     std::string dir = "calgarycorpus/";
-
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
                                           "pic", "progc", "progl", "progp", "trans"};
-
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
 
-
-    for (auto &current_file : file_list) {
+    for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
 
@@ -111,15 +137,8 @@ int main() {
         encoded_file_name.append(dir).append(current_file + encoding_suffix);
         decoded_file_name.append(dir).append(current_file + decoding_suffix);
 
-        auto bytes_input = read_bytes(initial_file_name);
-        auto bwt_result = bwt(bytes_input);
-        auto bwt_data = bwt_result.second;
-        auto bwt_position = bwt_result.first;
-        write_bytes(encoded_file_name, bwt_data);
-
-        auto encoded_bytes_input = read_bytes(encoded_file_name);
-        auto decoded_data = bwt_reverse(encoded_bytes_input, bwt_position);
-        write_bytes(decoded_file_name, decoded_data);
+        compress(initial_file_name, encoded_file_name);
+        decompress(encoded_file_name, decoded_file_name);
 
         std::cout << compare_files(initial_file_name, decoded_file_name) << std::endl;
     }
