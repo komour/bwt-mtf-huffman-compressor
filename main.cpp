@@ -2,6 +2,28 @@
 #include <vector>
 #include <numeric>
 #include <fstream>
+#include <set>
+
+const size_t BYTE_SIZE = 256;
+
+struct BTree {
+    bool has_value;
+    double prob;
+    unsigned char value;
+
+    BTree *left;
+    BTree *right;
+
+    bool operator<(const BTree &other) const {
+        return this->prob < other.prob;
+    }
+
+    BTree() : left(nullptr), right(nullptr), has_value(false), prob(-1), value(0) {}
+
+    BTree(bool has_value, double prob, unsigned char value = 0) :
+            left(nullptr), right(nullptr), has_value(has_value), prob(prob), value(value) {}
+
+};
 
 class bwt_cmp_reverse {
     const std::vector<unsigned char> &data;
@@ -101,16 +123,8 @@ bool compare_files(const std::string &p1, const std::string &p2) {
                       std::istreambuf_iterator<char>(f2.rdbuf()));
 }
 
-unsigned char get_index(const std::vector<unsigned char> &alphabet, const unsigned char &symbol) {
-    for (size_t i = 0; i < alphabet.size(); ++i) {
-        if (alphabet[i] == symbol) {
-            return i;
-        }
-    }
-}
-
 std::vector<unsigned char> move_to_front(std::vector<unsigned char> data) {
-    std::vector<unsigned char> alphabet(256);
+    std::vector<unsigned char> alphabet(BYTE_SIZE);
     std::iota(alphabet.begin(), alphabet.end(), 0);
     std::vector<unsigned char> encoded_data(data.size());
     for (size_t i = 0; i < data.size(); ++i) {
@@ -129,7 +143,7 @@ std::vector<unsigned char> move_to_front(std::vector<unsigned char> data) {
 }
 
 std::vector<unsigned char> move_to_front_reverse(std::vector<unsigned char> data) {
-    std::vector<unsigned char> alphabet(256);
+    std::vector<unsigned char> alphabet(BYTE_SIZE);
     std::iota(alphabet.begin(), alphabet.end(), 0);
     std::vector<unsigned char> decoded_data(data.size());
     for (size_t i = 0; i < data.size(); ++i) {
@@ -153,7 +167,6 @@ void compress(const std::string &initial_file_name, const std::string &encoded_f
     auto mtf_data = move_to_front(bwt_data);
 
     write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
-//    write_bytes(encoded_file_name, bwt_data, bwt_shift_position);
 }
 
 void decompress(const std::string &encoded_file_name, const std::string &decoded_file_name) {
@@ -162,10 +175,24 @@ void decompress(const std::string &encoded_file_name, const std::string &decoded
     size_t bwt_shift_position = result_input.first;
 
     auto decoded_mtf = move_to_front_reverse(encoded_bytes_input);
-
-//    auto decoded_data = bwt_reverse(encoded_bytes_input, bwt_shift_position);
     auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
     write_bytes(decoded_file_name, decoded_data);
+}
+
+void huffman(std::vector<unsigned char> &data) {
+    std::vector<double> probabilities(BYTE_SIZE, 0);
+    std::set<BTree> vertex_pool;
+    for (unsigned char c : data) {
+        ++probabilities[c];
+    }
+    for (size_t i = 0; i < data.size(); ++i) {
+        probabilities[data[i]] /= static_cast<double>(data.size());
+        if (probabilities[data[i]] != 0) {
+            auto new_vertex = BTree(true, probabilities[data[i]], data[i]);
+            vertex_pool.insert(new_vertex);
+        }
+    }
+
 }
 
 int main() {
