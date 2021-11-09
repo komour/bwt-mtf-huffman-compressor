@@ -4,6 +4,17 @@
 #include <fstream>
 #include <queue>
 #include <unordered_map>
+#include <climits>
+
+std::string char_to_bin(unsigned char c) {
+    static char bin[CHAR_BIT + 1] = {0};
+    int i;
+    for (i = CHAR_BIT - 1; i >= 0; i--) {
+        bin[i] = (c % 2) + '0';
+        c /= 2;
+    }
+    return bin;
+}
 
 const size_t BYTE_SIZE = 256;
 
@@ -18,13 +29,13 @@ struct BTree {
         return this->freq < other.freq;
     }
 
-    bool has_value() {
+    [[nodiscard]] bool has_value() const {
         return !this->left && !this->right;
     }
 
     BTree() : left(nullptr), right(nullptr), freq(-1), value(0) {}
 
-    BTree(long freq, unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
+    explicit BTree(long freq, unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
             freq(freq), left(left), right(right), value(byte_value) {}
 
 };
@@ -46,7 +57,7 @@ public:
 
     bool operator()(size_t left, size_t right) {
         size_t i = 0;
-        while (data[left + i] == data[right + i] && i < data.size()) {
+        while (data[left + i] == data[right + i] && i < data.size()) {  // TODO optimise memory
             ++i;
         }
         return data[left + i] < data[right + i];
@@ -209,25 +220,44 @@ std::unordered_map<unsigned char, std::vector<bool>> build_hashmap(BTree *root) 
 
 template<class T>
 void print_vector(const std::vector<T> &vec) {
-    for (auto el: vec) {
+    for (const auto &el: vec) {
         std::cout << el;
     }
-    std::cout << std::endl;
+}
+
+void print_binary_vector(const std::vector<unsigned char> &vec) {
+    for (const auto &el: vec) {
+        std::cout << char_to_bin(el);
+    }
+}
+
+void print_map(const std::unordered_map<unsigned char, std::vector<bool>> &map) {
+    std::cout << "##################\n";
+    for (const auto &pair: map) {
+        std::cout << pair.first << ' ';
+        print_vector(pair.second);
+        std::cout << std::endl;
+    }
+    std::cout << "##################\n";
+}
+
+void print_map(const std::unordered_map<std::vector<bool>, unsigned char> &map) {
+    std::cout << "##################\n";
+    for (const auto &pair: map) {
+        print_vector(pair.first);
+        std::cout << ' ' << pair.second;
+        std::cout << std::endl;
+    }
+    std::cout << "##################\n";
 }
 
 void append_bit(std::vector<unsigned char> &output_data, size_t &first_free_pos, const unsigned char &bit) {
-    if (first_free_pos == 8) {
+    if (first_free_pos == -1) {
         output_data.push_back(0u);
-        first_free_pos = 0;
+        first_free_pos = 7;
     }
     output_data[output_data.size() - 1] |= bit << first_free_pos;
-    ++first_free_pos;
-}
-
-void encode_one_byte(std::vector<unsigned char> &encoded_data, size_t &first_free_pos, const std::vector<bool> &code_word) {
-    for (const auto &bit : code_word) {
-        append_bit(encoded_data, first_free_pos, bit);
-    }
+    --first_free_pos;
 }
 
 std::vector<unsigned char> encode_with_huffman(
@@ -235,11 +265,13 @@ std::vector<unsigned char> encode_with_huffman(
         std::unordered_map<unsigned char, std::vector<bool>> &code_words
 ) {
     auto encoded_data = std::vector<unsigned char>(1);
-    size_t first_free_pos = 0;
+    size_t first_free_pos = 7;
 
-    for (const auto &byte : data) {
+    for (const auto &byte: data) {
         const auto &code_word = code_words[byte];
-        encode_one_byte(encoded_data, first_free_pos, code_word);
+        for (const auto &bit: code_word) {
+            append_bit(encoded_data, first_free_pos, bit);
+        }
     }
     return encoded_data;
 }
@@ -274,6 +306,58 @@ huffman(const std::vector<unsigned char> &data) {
     return std::make_pair(encoded_data, code_words);
 }
 
+bool get_bit(unsigned char byte, size_t bit_number) {
+    return byte & (1 << (bit_number - 1));
+}
+
+bool read_bit(const std::vector<unsigned char> &data, size_t &byte_index, size_t &bit_index) {
+    if (bit_index == 8) {
+        ++byte_index;
+        bit_index = 0;
+    }
+    auto byte = data[byte_index];
+    return get_bit(byte, 8 - bit_index++);
+}
+
+std::vector<unsigned char> huffman_decode(
+        const std::vector<unsigned char> &data,
+        std::unordered_map<std::vector<bool>, unsigned char> &code_words,
+        const size_t &initial_data_size
+) {
+    std::cout << "\nDECODING\n";
+    std::vector<unsigned char> decoded_data;
+    size_t byte_index = 0;
+    size_t bit_index = 0;
+    size_t bytes_decoded = 0;
+    while (bytes_decoded < initial_data_size) {
+
+        std::vector<bool> cur_codeword;
+        while (!code_words.contains(cur_codeword)) {
+            bool bit = read_bit(data, byte_index, bit_index);
+            cur_codeword.push_back(bit);
+        }
+        unsigned char decoded_word = code_words[cur_codeword];
+
+        print_vector(cur_codeword);
+        std::cout << ' ' << decoded_word << '\n';
+
+        decoded_data.push_back(decoded_word);
+        ++bytes_decoded;
+    }
+    std::cout << "DECODING\n";
+    return decoded_data;
+}
+
+template<class K, class V>
+std::unordered_map<V, K> reverse_map(std::unordered_map<K, V> &map) {
+    std::unordered_map<V, K> new_map;
+    for (const auto &pair: map) {
+        new_map[pair.second] = pair.first;
+    }
+    return new_map;
+}
+
+
 int main() {
     std::string dir = "calgarycorpus/";
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
@@ -282,14 +366,28 @@ int main() {
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
 
-
-    std::string initial_string = "abbbbaaaabbbbccccaa";
+    std::string initial_string = "akjhgruwfekibnoieruviugkhwilbozx";
     std::vector<unsigned char> initial_data;
     for (auto c: initial_string) {
         initial_data.push_back(c);
     }
+    std::cout << "initial data: ";
+    print_vector(initial_data);
+    std::cout << std::endl;
+    size_t initial_data_size = initial_data.size();
     auto encoded = huffman(initial_data);
-    print_vector(encoded.first);
+    print_binary_vector(encoded.first);
+    std::cout << std::endl;
+
+    auto hashmap = encoded.second;
+    print_map(hashmap);
+
+    auto reversed_map = reverse_map(hashmap);
+
+    auto decoded = huffman_decode(encoded.first, reversed_map, initial_data_size);
+    print_vector(decoded);
+    std::cout << std::endl;
+
     return 0;
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
