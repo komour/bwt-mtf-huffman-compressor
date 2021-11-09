@@ -2,26 +2,30 @@
 #include <vector>
 #include <numeric>
 #include <fstream>
-#include <set>
+#include <queue>
+#include <unordered_map>
 
 const size_t BYTE_SIZE = 256;
 
 struct BTree {
-    bool has_value;
-    double prob;
+    long freq;
     unsigned char value;
 
     BTree *left;
     BTree *right;
 
     bool operator<(const BTree &other) const {
-        return this->prob < other.prob;
+        return this->freq < other.freq;
     }
 
-    BTree() : left(nullptr), right(nullptr), has_value(false), prob(-1), value(0) {}
+    bool has_value() {
+        return !this->left && !this->right;
+    }
 
-    BTree(bool has_value, double prob, unsigned char value = 0) :
-            left(nullptr), right(nullptr), has_value(has_value), prob(prob), value(value) {}
+    BTree() : left(nullptr), right(nullptr), freq(-1), value(0) {}
+
+    BTree(long freq, unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
+            freq(freq), left(left), right(right), value(byte_value) {}
 
 };
 
@@ -179,20 +183,95 @@ void decompress(const std::string &encoded_file_name, const std::string &decoded
     write_bytes(decoded_file_name, decoded_data);
 }
 
-void huffman(std::vector<unsigned char> &data) {
-    std::vector<double> probabilities(BYTE_SIZE, 0);
-    std::set<BTree> vertex_pool;
-    for (unsigned char c : data) {
-        ++probabilities[c];
+void traverse(
+        BTree *root,
+        const std::vector<bool> &code_word,
+        std::unordered_map<unsigned char, std::vector<bool>> &code_words
+) {
+    if (root->has_value()) {
+        code_words[root->value] = code_word;
+        return;
     }
-    for (size_t i = 0; i < data.size(); ++i) {
-        probabilities[data[i]] /= static_cast<double>(data.size());
-        if (probabilities[data[i]] != 0) {
-            auto new_vertex = BTree(true, probabilities[data[i]], data[i]);
-            vertex_pool.insert(new_vertex);
+    std::vector<bool> left_codeword = code_word;
+    std::vector<bool> right_codeword = code_word;
+    left_codeword.push_back(0);
+    right_codeword.push_back(1);
+    traverse(root->left, left_codeword, code_words);
+    traverse(root->right, right_codeword, code_words);
+}
+
+std::unordered_map<unsigned char, std::vector<bool>> build_hashmap(BTree *root) {
+    std::unordered_map<unsigned char, std::vector<bool>> code_words;
+    std::vector<bool> initial_codeword;
+    traverse(root, initial_codeword, code_words);
+    return code_words;
+}
+
+template<class T>
+void print_vector(const std::vector<T> &vec) {
+    for (auto el: vec) {
+        std::cout << el;
+    }
+    std::cout << std::endl;
+}
+
+void append_bit(std::vector<unsigned char> &output_data, size_t &first_free_pos, const unsigned char &bit) {
+    if (first_free_pos == 8) {
+        output_data.push_back(0u);
+        first_free_pos = 0;
+    }
+    output_data[output_data.size() - 1] |= bit << first_free_pos;
+    ++first_free_pos;
+}
+
+void encode_one_byte(std::vector<unsigned char> &encoded_data, size_t &first_free_pos, const std::vector<bool> &code_word) {
+    for (const auto &bit : code_word) {
+        append_bit(encoded_data, first_free_pos, bit);
+    }
+}
+
+std::vector<unsigned char> encode_with_huffman(
+        const std::vector<unsigned char> &data,
+        std::unordered_map<unsigned char, std::vector<bool>> &code_words
+) {
+    auto encoded_data = std::vector<unsigned char>(1);
+    size_t first_free_pos = 0;
+
+    for (const auto &byte : data) {
+        const auto &code_word = code_words[byte];
+        encode_one_byte(encoded_data, first_free_pos, code_word);
+    }
+    return encoded_data;
+}
+
+std::pair<std::vector<unsigned char>, std::unordered_map<unsigned char, std::vector<bool>>>
+huffman(const std::vector<unsigned char> &data) {
+    std::vector<long> frequencies(BYTE_SIZE, 0);
+    std::priority_queue<BTree *> vertex_pool;
+    std::vector<bool> already_in_set(BYTE_SIZE);
+    for (unsigned char c: data) {
+        ++frequencies[c];
+    }
+    for (unsigned char byte: data) {
+        if (!already_in_set[byte] && frequencies[byte] != 0) {
+            auto new_vertex = new BTree(frequencies[byte], byte);
+            vertex_pool.push(new_vertex);
+            already_in_set[byte] = true;
         }
     }
+    while (vertex_pool.size() != 1) {
+        auto left = vertex_pool.top();
+        vertex_pool.pop();
+        auto right = vertex_pool.top();
+        vertex_pool.pop();
 
+        long new_freq = left->freq + right->freq;
+        auto new_node = new BTree(new_freq, 0, left, right);
+        vertex_pool.push(new_node);
+    }
+    auto code_words = build_hashmap(vertex_pool.top());
+    auto encoded_data = encode_with_huffman(data, code_words);
+    return std::make_pair(encoded_data, code_words);
 }
 
 int main() {
@@ -203,6 +282,15 @@ int main() {
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
 
+
+    std::string initial_string = "abbbbaaaabbbbccccaa";
+    std::vector<unsigned char> initial_data;
+    for (auto c: initial_string) {
+        initial_data.push_back(c);
+    }
+    auto encoded = huffman(initial_data);
+    print_vector(encoded.first);
+    return 0;
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
