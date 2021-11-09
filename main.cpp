@@ -77,7 +77,7 @@ std::vector<unsigned char> bwt_reverse(const std::vector<unsigned char> &bwt_dat
     return initial_data;
 }
 
-void write_bytes(const std::string &file_name, std::vector<unsigned char> &data,
+void write_bytes(const std::string &file_name, const std::vector<unsigned char> &data,
                  const size_t bwt_shift_position = SIZE_MAX) {
     std::ofstream fout(file_name, std::ios::binary);
     if (bwt_shift_position != SIZE_MAX) {
@@ -171,27 +171,6 @@ std::vector<unsigned char> move_to_front_reverse(std::vector<unsigned char> data
         }
     }
     return decoded_data;
-}
-
-void compress(const std::string &initial_file_name, const std::string &encoded_file_name) {
-    auto bytes_input = read_bytes(initial_file_name).second;
-    auto bwt_result = bwt(bytes_input);
-    auto bwt_data = bwt_result.second;
-    auto bwt_shift_position = bwt_result.first;
-
-    auto mtf_data = move_to_front(bwt_data);
-
-    write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
-}
-
-void decompress(const std::string &encoded_file_name, const std::string &decoded_file_name) {
-    auto result_input = read_bytes(encoded_file_name, true);
-    auto encoded_bytes_input = result_input.second;
-    size_t bwt_shift_position = result_input.first;
-
-    auto decoded_mtf = move_to_front_reverse(encoded_bytes_input);
-    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
-    write_bytes(decoded_file_name, decoded_data);
 }
 
 void traverse(
@@ -319,12 +298,11 @@ bool read_bit(const std::vector<unsigned char> &data, size_t &byte_index, size_t
     return get_bit(byte, 8 - bit_index++);
 }
 
-std::vector<unsigned char> huffman_decode(
+std::vector<unsigned char> huffman_reverse(
         const std::vector<unsigned char> &data,
         std::unordered_map<std::vector<bool>, unsigned char> &code_words,
         const size_t &initial_data_size
 ) {
-    std::cout << "\nDECODING\n";
     std::vector<unsigned char> decoded_data;
     size_t byte_index = 0;
     size_t bit_index = 0;
@@ -338,13 +316,9 @@ std::vector<unsigned char> huffman_decode(
         }
         unsigned char decoded_word = code_words[cur_codeword];
 
-        print_vector(cur_codeword);
-        std::cout << ' ' << decoded_word << '\n';
-
         decoded_data.push_back(decoded_word);
         ++bytes_decoded;
     }
-    std::cout << "DECODING\n";
     return decoded_data;
 }
 
@@ -357,6 +331,58 @@ std::unordered_map<V, K> reverse_map(std::unordered_map<K, V> &map) {
     return new_map;
 }
 
+void compress(const std::string &initial_file_name, const std::string &encoded_file_name) {
+    auto bytes_input = read_bytes(initial_file_name).second;
+    auto bwt_result = bwt(bytes_input);
+    auto bwt_data = bwt_result.second;
+    auto bwt_shift_position = bwt_result.first;
+
+    auto mtf_data = move_to_front(bwt_data);
+
+    write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
+}
+
+void decompress(const std::string &encoded_file_name, const std::string &decoded_file_name) {
+    auto result_input = read_bytes(encoded_file_name, true);
+    auto encoded_bytes_input = result_input.second;
+    size_t bwt_shift_position = result_input.first;
+
+    auto decoded_mtf = move_to_front_reverse(encoded_bytes_input);
+    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
+
+    write_bytes(decoded_file_name, decoded_data);
+}
+
+void full_pipeline(
+        const std::string &initial_file_name,
+        const std::string &encoded_file_name,
+        const std::string &decoded_file_name
+) {
+    auto bytes_input = read_bytes(initial_file_name).second;
+    auto bwt_result = bwt(bytes_input);
+    auto bwt_data = bwt_result.second;
+    auto bwt_shift_position = bwt_result.first;
+
+    auto mtf_data = move_to_front(bwt_data);
+    const size_t initial_data_size = mtf_data.size();
+
+    auto huffman_result = huffman(mtf_data);
+//    auto huffman_result = huffman(bytes_input);
+//    write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
+    auto code_words = huffman_result.second;
+    const auto encoded_huffman = huffman_result.first;
+    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position);
+
+    auto reversed_code_words = reverse_map(code_words);
+    auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
+
+
+//    auto decoded_mtf = move_to_front_reverse(mtf_data);
+    auto decoded_mtf = move_to_front_reverse(decoded_huffman);
+    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
+    write_bytes(decoded_file_name, decoded_data);
+//    write_bytes(decoded_file_name, decoded_huffman);
+}
 
 int main() {
     std::string dir = "calgarycorpus/";
@@ -366,29 +392,6 @@ int main() {
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
 
-    std::string initial_string = "akjhgruwfekibnoieruviugkhwilbozx";
-    std::vector<unsigned char> initial_data;
-    for (auto c: initial_string) {
-        initial_data.push_back(c);
-    }
-    std::cout << "initial data: ";
-    print_vector(initial_data);
-    std::cout << std::endl;
-    size_t initial_data_size = initial_data.size();
-    auto encoded = huffman(initial_data);
-    print_binary_vector(encoded.first);
-    std::cout << std::endl;
-
-    auto hashmap = encoded.second;
-    print_map(hashmap);
-
-    auto reversed_map = reverse_map(hashmap);
-
-    auto decoded = huffman_decode(encoded.first, reversed_map, initial_data_size);
-    print_vector(decoded);
-    std::cout << std::endl;
-
-    return 0;
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
@@ -398,8 +401,9 @@ int main() {
         encoded_file_name.append(dir).append(current_file + encoding_suffix);
         decoded_file_name.append(dir).append(current_file + decoding_suffix);
 
-        compress(initial_file_name, encoded_file_name);
-        decompress(encoded_file_name, decoded_file_name);
+//        compress(initial_file_name, encoded_file_name);
+//        decompress(encoded_file_name, decoded_file_name);
+        full_pipeline(initial_file_name, encoded_file_name, decoded_file_name);
 
         std::cout << compare_files(initial_file_name, decoded_file_name) << std::endl;
     }
