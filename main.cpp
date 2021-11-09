@@ -1,10 +1,11 @@
+#include "debug_utilities.h"
+#include "io_utilities.h"
+
 #include <iostream>
 #include <vector>
 #include <numeric>
 #include <queue>
 #include <unordered_map>
-#include "debug_utilities.h"
-#include "io_utilities.h"
 
 const size_t BYTE_SIZE = 256;
 

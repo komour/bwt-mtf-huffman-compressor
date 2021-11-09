@@ -1,5 +1,9 @@
 #pragma once
 
+#include <iostream>
+#include <vector>
+#include <fstream>
+
 void write_bytes(
         const std::string &file_name,
         const std::vector<unsigned char> &data,
