@@ -1,25 +1,14 @@
 #include <iostream>
 #include <vector>
 #include <numeric>
-#include <fstream>
 #include <queue>
 #include <unordered_map>
-#include <climits>
-
-std::string char_to_bin(unsigned char c) {
-    static char bin[CHAR_BIT + 1] = {0};
-    int i;
-    for (i = CHAR_BIT - 1; i >= 0; i--) {
-        bin[i] = (c % 2) + '0';
-        c /= 2;
-    }
-    return bin;
-}
+#include "debug_utilities.h"
+#include "io_utilities.h"
 
 const size_t BYTE_SIZE = 256;
 
 struct BTree {
-    long freq;
     unsigned char value;
 
     BTree *left;
@@ -29,10 +18,10 @@ struct BTree {
         return !this->left && !this->right;
     }
 
-    BTree() : left(nullptr), right(nullptr), freq(-1), value(0) {}
+    BTree() : left(nullptr), right(nullptr), value(0) {}
 
-    explicit BTree(long freq, unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
-            freq(freq), left(left), right(right), value(byte_value) {}
+    explicit BTree(unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
+            left(left), right(right), value(byte_value) {}
 
 };
 
@@ -46,6 +35,14 @@ public:
     }
 };
 
+size_t cyclic_index(
+        const size_t &start_index,
+        const size_t &offset,
+        const size_t &n
+) {
+    return start_index + offset < n ? start_index + offset : start_index + offset - n;
+}
+
 class bwt_cmp_straight {
     const std::vector<unsigned char> &data;
 public:
@@ -53,18 +50,18 @@ public:
 
     bool operator()(size_t left, size_t right) {
         size_t i = 0;
-        while (data[left + i] == data[right + i] && i < data.size()) {  // TODO optimise memory
+        while (data[cyclic_index(left, i, data.size())] == data[cyclic_index(right, i, data.size())] &&
+               i < data.size()) {
             ++i;
         }
-        return data[left + i] < data[right + i];
+        return data[cyclic_index(left, i, data.size())] < data[cyclic_index(right, i, data.size())];
     }
 };
 
-bool btree_cmp(BTree *left, BTree *right) {
-    return left->freq < right->freq;
-}
-
-std::vector<unsigned char> bwt_reverse(const std::vector<unsigned char> &bwt_data, size_t row_index) {
+std::vector<unsigned char> bwt_reverse(
+        const std::vector<unsigned char> &bwt_data,
+        size_t row_index
+) {
     std::vector<size_t> l_shift(bwt_data.size());
     std::iota(l_shift.begin(), l_shift.end(), 0);
     std::stable_sort(l_shift.begin(), l_shift.end(), bwt_cmp_reverse(bwt_data));
@@ -77,68 +74,25 @@ std::vector<unsigned char> bwt_reverse(const std::vector<unsigned char> &bwt_dat
     return initial_data;
 }
 
-void write_bytes(const std::string &file_name, const std::vector<unsigned char> &data,
-                 const size_t bwt_shift_position = SIZE_MAX) {
-    std::ofstream fout(file_name, std::ios::binary);
-    if (bwt_shift_position != SIZE_MAX) {
-        fout.write(reinterpret_cast<const char *>(&bwt_shift_position), sizeof(size_t));
-    }
-    fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
-    fout.close();
-}
-
-std::pair<size_t, std::vector<unsigned char>> read_bytes(const std::string &file_name, const bool read_index = false) {
-    std::ifstream fin(file_name, std::ios::binary);
-    std::pair<size_t, std::vector<unsigned char>> input_result;
-    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
-    if (read_index) {
-        input_result.first = *((std::size_t *) bytes.data());
-        input_result.second = std::vector(bytes.begin() + sizeof(size_t), bytes.end());
-    } else {
-        input_result.first = SIZE_MAX;
-        input_result.second = bytes;
-    }
-    fin.close();
-    return input_result;
-}
-
-std::pair<size_t, std::vector<unsigned char>> bwt(std::vector<unsigned char> data) {
+std::pair<size_t, std::vector<unsigned char>> bwt(
+        std::vector<unsigned char> data
+) {
     std::vector<std::size_t> shift_order(data.size());
     std::iota(shift_order.begin(), shift_order.end(), 0);
-    data.insert(data.end(), data.begin(), data.end());
     std::stable_sort(shift_order.begin(), shift_order.end(), bwt_cmp_straight(data));
 
-    std::vector<unsigned char> encoded(data.size() / 2);
+    std::vector<unsigned char> encoded(data.size());
     std::size_t shift_position;
-    for (std::size_t i = 0; i < data.size() / 2; ++i) {
-        encoded[i] = data[shift_order[i] + data.size() / 2 - 1];
+    for (std::size_t i = 0; i < data.size(); ++i) {
+        encoded[i] = data[cyclic_index(shift_order[i], data.size() - 1, data.size())];
         if (shift_order[i] == 0) shift_position = i;
     }
     return std::make_pair(shift_position, encoded);
 }
 
-// https://stackoverflow.com/a/37575457/12658435
-bool compare_files(const std::string &p1, const std::string &p2) {
-    std::ifstream f1(p1, std::ifstream::binary | std::ifstream::ate);
-    std::ifstream f2(p2, std::ifstream::binary | std::ifstream::ate);
-
-    if (f1.fail() || f2.fail()) {
-        return false; //file problem
-    }
-
-    if (f1.tellg() != f2.tellg()) {
-        return false; //size mismatch
-    }
-
-    //seek back to beginning and use std::equal to compare contents
-    f1.seekg(0, std::ifstream::beg);
-    f2.seekg(0, std::ifstream::beg);
-    return std::equal(std::istreambuf_iterator<char>(f1.rdbuf()),
-                      std::istreambuf_iterator<char>(),
-                      std::istreambuf_iterator<char>(f2.rdbuf()));
-}
-
-std::vector<unsigned char> move_to_front(std::vector<unsigned char> data) {
+std::vector<unsigned char> move_to_front(
+        std::vector<unsigned char> data
+) {
     std::vector<unsigned char> alphabet(BYTE_SIZE);
     std::iota(alphabet.begin(), alphabet.end(), 0);
     std::vector<unsigned char> encoded_data(data.size());
@@ -157,7 +111,9 @@ std::vector<unsigned char> move_to_front(std::vector<unsigned char> data) {
     return encoded_data;
 }
 
-std::vector<unsigned char> move_to_front_reverse(std::vector<unsigned char> data) {
+std::vector<unsigned char> move_to_front_reverse(
+        std::vector<unsigned char> data
+) {
     std::vector<unsigned char> alphabet(BYTE_SIZE);
     std::iota(alphabet.begin(), alphabet.end(), 0);
     std::vector<unsigned char> decoded_data(data.size());
@@ -184,59 +140,19 @@ void traverse(
     }
     std::vector<bool> left_codeword = code_word;
     std::vector<bool> right_codeword = code_word;
-    left_codeword.push_back(false);
-    right_codeword.push_back(true);
+    left_codeword.push_back(0);
+    right_codeword.push_back(1);
     traverse(root->left, left_codeword, code_words);
     traverse(root->right, right_codeword, code_words);
 }
 
-std::unordered_map<unsigned char, std::vector<bool>> build_hashmap(BTree *root) {
+std::unordered_map<unsigned char, std::vector<bool>> build_hashmap(
+        BTree *root
+) {
     std::unordered_map<unsigned char, std::vector<bool>> code_words;
     std::vector<bool> initial_codeword;
     traverse(root, initial_codeword, code_words);
     return code_words;
-}
-
-template<class T>
-void print_vector(const std::vector<T> &vec) {
-    for (const auto &el: vec) {
-        std::cout << el;
-    }
-}
-
-void print_binary_vector(const std::vector<unsigned char> &vec) {
-    for (const auto &el: vec) {
-        std::cout << char_to_bin(el);
-    }
-}
-
-void print_map(const std::unordered_map<unsigned char, std::vector<bool>> &map) {
-    std::cout << "##################\n";
-    for (const auto &pair: map) {
-        std::cout << pair.first << ' ';
-        print_vector(pair.second);
-        std::cout << std::endl;
-    }
-    std::cout << "##################\n";
-}
-
-void print_map(const std::unordered_map<std::vector<bool>, unsigned char> &map) {
-    std::cout << "##################\n";
-    for (const auto &pair: map) {
-        print_vector(pair.first);
-        std::cout << ' ' << pair.second;
-        std::cout << std::endl;
-    }
-    std::cout << "##################\n";
-}
-
-void append_bit(std::vector<unsigned char> &output_data, size_t &first_free_pos, bool bit) {
-    if (first_free_pos == -1) {
-        output_data.push_back(0);
-        first_free_pos = 7;
-    }
-    output_data[output_data.size() - 1] |= bit << first_free_pos;
-    --first_free_pos;
 }
 
 std::vector<unsigned char> encode_with_huffman(
@@ -267,7 +183,7 @@ huffman(const std::vector<unsigned char> &data) {
 
     for (unsigned char byte: data) {
         if (!already_in_queue[byte] && frequencies[byte] != 0) {
-            auto new_vertex = new BTree(frequencies[byte], byte);
+            auto new_vertex = new BTree(byte);
             vertex_pool.push(std::make_pair(-frequencies[byte], new_vertex));
             already_in_queue[byte] = true;
         }
@@ -277,29 +193,14 @@ huffman(const std::vector<unsigned char> &data) {
         vertex_pool.pop();
         auto right = vertex_pool.top();
         vertex_pool.pop();
-//        std::cout << left.second->freq << ' ' << right.second->freq << std::endl;
-//        std::cout << left.second->value << ' ' << right.second->value << std::endl;
 
         long new_freq = left.first + right.first;
-        auto new_node = new BTree(new_freq, 0, left.second, right.second);
+        auto new_node = new BTree(0, left.second, right.second);
         vertex_pool.push(std::make_pair(new_freq, new_node));
     }
     auto code_words = build_hashmap(vertex_pool.top().second);
     auto encoded_data = encode_with_huffman(data, code_words);
     return std::make_pair(encoded_data, code_words);
-}
-
-bool get_bit(unsigned char byte, size_t bit_number) {
-    return byte & (1 << (bit_number - 1));
-}
-
-bool read_bit(const std::vector<unsigned char> &data, size_t &byte_index, size_t &bit_index) {
-    if (bit_index == 8) {
-        ++byte_index;
-        bit_index = 0;
-    }
-    auto byte = data[byte_index];
-    return get_bit(byte, 8 - bit_index++);
 }
 
 std::vector<unsigned char> huffman_reverse(
@@ -327,7 +228,9 @@ std::vector<unsigned char> huffman_reverse(
 }
 
 template<class K, class V>
-std::unordered_map<V, K> reverse_map(std::unordered_map<K, V> &map) {
+std::unordered_map<V, K> reverse_map(
+        std::unordered_map<K, V> &map
+) {
     std::unordered_map<V, K> new_map;
     for (const auto &pair: map) {
         new_map[pair.second] = pair.first;
@@ -335,7 +238,10 @@ std::unordered_map<V, K> reverse_map(std::unordered_map<K, V> &map) {
     return new_map;
 }
 
-void compress(const std::string &initial_file_name, const std::string &encoded_file_name) {
+void compress(
+        const std::string &initial_file_name,
+        const std::string &encoded_file_name
+) {
     auto bytes_input = read_bytes(initial_file_name).second;
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
@@ -346,7 +252,10 @@ void compress(const std::string &initial_file_name, const std::string &encoded_f
     write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
 }
 
-void decompress(const std::string &encoded_file_name, const std::string &decoded_file_name) {
+void decompress(
+        const std::string &encoded_file_name,
+        const std::string &decoded_file_name
+) {
     auto result_input = read_bytes(encoded_file_name, true);
     auto encoded_bytes_input = result_input.second;
     size_t bwt_shift_position = result_input.first;
@@ -371,8 +280,6 @@ void full_pipeline(
     const size_t initial_data_size = mtf_data.size();
 
     auto huffman_result = huffman(mtf_data);
-//    auto huffman_result = huffman(bytes_input);
-//    write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
     auto code_words = huffman_result.second;
     const auto encoded_huffman = huffman_result.first;
     write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position);
@@ -381,11 +288,9 @@ void full_pipeline(
     auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
 
 
-//    auto decoded_mtf = move_to_front_reverse(mtf_data);
     auto decoded_mtf = move_to_front_reverse(decoded_huffman);
     auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
     write_bytes(decoded_file_name, decoded_data);
-//    write_bytes(decoded_file_name, decoded_huffman);
 }
 
 int main() {
@@ -395,21 +300,6 @@ int main() {
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
-
-//    std::string initial_string = "zyyxxxwwwwvvvvvuuuuuuttttttttsssssssssbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-//    std::vector<unsigned char> initial_data;
-//    for (auto c: initial_string) {
-//        initial_data.push_back(c);
-//    }
-//    auto huffman_res = huffman(initial_data);
-//    auto huffman_code = huffman_res.first;
-//    print_binary_vector(huffman_code);
-//    std::cout
-//            << "\n111101011110111111011111100111100111100111001110011100111001110111101111011110111101111111111111111111111111111111110011001100110011001100110011001101110111011101110111011101110111011010101010101010101010101010101010101010101010101010101010000000000000000000000000000000000000000000000000000\n";
-//    std::cout
-//            << "\n111101011110111111011111100111100111100111001110011100111001110111101111011110111101111111111111111111111111111111110011001100110011001100110011001101110111011101110111011101110111011010101010101010101010101010101010101010101010101010101010000000000000000000000000000000000000000000000000000\n";
-//    print_map(huffman_res.second);
-//    return 0;
 
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
