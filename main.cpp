@@ -243,23 +243,26 @@ void compress(
         const std::string &initial_file_name,
         const std::string &encoded_file_name
 ) {
-    auto bytes_input = read_bytes(initial_file_name).second;
+    const auto &[bytes_input, dummy1, dummy2] = read_bytes(initial_file_name);
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
 
     auto mtf_data = move_to_front(bwt_data);
+    size_t mtf_data_size = mtf_data.size();
 
-    write_bytes(encoded_file_name, mtf_data, bwt_shift_position);
+    auto huffman_result = huffman(mtf_data);
+    auto huffman_data = huffman_result.first;
+    auto code_words = huffman_result.second;
+
+    write_bytes(encoded_file_name, mtf_data, bwt_shift_position, mtf_data_size);
 }
 
 void decompress(
         const std::string &encoded_file_name,
         const std::string &decoded_file_name
 ) {
-    auto result_input = read_bytes(encoded_file_name, true);
-    auto encoded_bytes_input = result_input.second;
-    size_t bwt_shift_position = result_input.first;
+    const auto &[encoded_bytes_input, bwt_shift_position, initial_data_size] = read_bytes(encoded_file_name, true);
 
     auto decoded_mtf = move_to_front_reverse(encoded_bytes_input);
     auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
@@ -272,25 +275,29 @@ void full_pipeline(
         const std::string &encoded_file_name,
         const std::string &decoded_file_name
 ) {
-    auto bytes_input = read_bytes(initial_file_name).second;
+    const auto &[bytes_input, dummy1, dummy2] = read_bytes(initial_file_name);
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
 
     auto mtf_data = move_to_front(bwt_data);
-    const size_t initial_data_size = mtf_data.size();
+    const size_t mtf_data_size = mtf_data.size();
 
     auto huffman_result = huffman(mtf_data);
     auto code_words = huffman_result.second;
     const auto encoded_huffman = huffman_result.first;
-    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position);
+    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position, mtf_data_size);
+
+    const auto &[encoded_huffman1, bwt_shift_position1, mtf_data_size1] = read_bytes(encoded_file_name, true);
+    std::cout << bwt_shift_position << ' ' << mtf_data_size << std::endl;
+    std::cout << bwt_shift_position1 << ' ' << mtf_data_size1 << std::endl;
 
     auto reversed_code_words = reverse_map(code_words);
-    auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
+    auto decoded_huffman = huffman_reverse(encoded_huffman1, reversed_code_words, mtf_data_size1);
 
 
     auto decoded_mtf = move_to_front_reverse(decoded_huffman);
-    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
+    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position1);
     write_bytes(decoded_file_name, decoded_data);
 }
 

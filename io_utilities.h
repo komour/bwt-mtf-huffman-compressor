@@ -7,32 +7,40 @@
 void write_bytes(
         const std::string &file_name,
         const std::vector<unsigned char> &data,
-        const size_t bwt_shift_position = SIZE_MAX
+        const size_t bwt_shift_position = SIZE_MAX,
+        const size_t initial_data_size = SIZE_MAX
 ) {
     std::ofstream fout(file_name, std::ios::binary);
     if (bwt_shift_position != SIZE_MAX) {
         fout.write(reinterpret_cast<const char *>(&bwt_shift_position), sizeof(size_t));
     }
+    if (initial_data_size != SIZE_MAX) {
+        fout.write(reinterpret_cast<const char *>(&initial_data_size), sizeof(size_t));
+    }
     fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
     fout.close();
 }
 
-std::pair<size_t, std::vector<unsigned char>> read_bytes(
+std::tuple<std::vector<unsigned char>, size_t, size_t> read_bytes(
         const std::string &file_name,
         const bool read_meta = false
 ) {
+    size_t initial_data_size = SIZE_MAX;
+    size_t bwt_shift_position = SIZE_MAX;
+    std::vector<unsigned char> data;
+
     std::ifstream fin(file_name, std::ios::binary);
-    std::pair<size_t, std::vector<unsigned char>> input_result;
     std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
-    if (read_meta) {
-        input_result.first = *((std::size_t *) bytes.data());
-        input_result.second = std::vector(bytes.begin() + sizeof(size_t), bytes.end());
-    } else {
-        input_result.first = SIZE_MAX;
-        input_result.second = bytes;
-    }
     fin.close();
-    return input_result;
+
+    if (read_meta) {
+        bwt_shift_position = *((size_t *) bytes.data());
+        initial_data_size = *((size_t *) bytes.data() + 1);
+        data = std::vector(bytes.begin() + 2 * sizeof(size_t), bytes.end());
+    } else {
+        data = bytes;
+    }
+    return {data, bwt_shift_position, initial_data_size};
 }
 
 bool get_bit(unsigned char byte, size_t bit_number) {
