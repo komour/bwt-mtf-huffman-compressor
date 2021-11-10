@@ -6,6 +6,7 @@
 #include <numeric>
 #include <queue>
 #include <unordered_map>
+#include <map>
 
 const size_t BYTE_SIZE = 256;
 
@@ -66,7 +67,7 @@ std::vector<unsigned char> bwt_reverse(
     std::stable_sort(l_shift.begin(), l_shift.end(), bwt_cmp_reverse(bwt_data));
 
     std::vector<unsigned char> initial_data(bwt_data.size(), '0');
-    for (std::size_t i = 0; i < bwt_data.size(); ++i) {
+    for (size_t i = 0; i < bwt_data.size(); ++i) {
         initial_data[i] = bwt_data[l_shift[row_index]];
         row_index = l_shift[row_index];
     }
@@ -76,13 +77,13 @@ std::vector<unsigned char> bwt_reverse(
 std::pair<size_t, std::vector<unsigned char>> bwt(
         std::vector<unsigned char> data
 ) {
-    std::vector<std::size_t> shift_order(data.size());
+    std::vector<size_t> shift_order(data.size());
     std::iota(shift_order.begin(), shift_order.end(), 0);
     std::stable_sort(shift_order.begin(), shift_order.end(), bwt_cmp_straight(data));
 
     std::vector<unsigned char> encoded(data.size());
-    std::size_t shift_position;
-    for (std::size_t i = 0; i < data.size(); ++i) {
+    size_t shift_position;
+    for (size_t i = 0; i < data.size(); ++i) {
         encoded[i] = data[cyclic_index(shift_order[i], data.size() - 1, data.size())];
         if (shift_order[i] == 0) shift_position = i;
     }
@@ -290,6 +291,12 @@ std::unordered_map<V, K> reverse_map(
     return new_map;
 }
 
+void print_metrics(
+        const std::string &output_file,
+        const size_t &initial_data,
+        const size_t &encoded_data_size
+);
+
 void compress(
         const std::string &initial_file_name,
         const std::string &encoded_file_name
@@ -309,6 +316,11 @@ void compress(
     auto huffman_tree_encoded = tree_to_bytes(huffman_tree_root);
     auto size_of_tree = huffman_tree_encoded.size() * sizeof(unsigned char);
 
+    size_t encoded_data_size = sizeof(unsigned char) * huffman_tree_encoded.size();
+    encoded_data_size += 2 * sizeof(size_t) + sizeof(unsigned long);
+    std::cout << "header size: " << double(encoded_data_size) << " $$ ";
+    encoded_data_size += sizeof(unsigned char) * huffman_data.size();
+    print_metrics(encoded_file_name, bytes_input.size(), encoded_data_size);
     write_bytes(encoded_file_name, huffman_data, bwt_shift_position, mtf_data_size, size_of_tree, huffman_tree_encoded);
 }
 
@@ -367,7 +379,6 @@ void full_pipeline(
     write_bytes(decoded_file_name, decoded_data);
 }
 
-
 const int COUNT = 10;
 
 void print2DUtil(BTree *root, int space) {
@@ -388,7 +399,20 @@ void print2D(BTree *root) {
     print2DUtil(root, 0);
 }
 
-int main() {
+void print_metrics(
+        const std::string &output_file,
+        const size_t &initial_data_size,
+        const size_t &encoded_data_size
+) {
+    std::cout << "file_name: " << output_file
+              << " $$ bits_avg: " << (8 * double(encoded_data_size)) / (double(initial_data_size))
+              << " $$ encoded_file_size: " << encoded_data_size
+              << " $$ compress_rate = " << (double(initial_data_size)) / (double(encoded_data_size))
+              << std::endl;
+}
+
+int main(int argc, char *argv[]) {
+//#ifdef FULLPIPELINE
     std::string dir = "calgarycorpus/";
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
                                           "pic", "progc", "progl", "progp", "trans"};
@@ -408,7 +432,26 @@ int main() {
         compress(initial_file_name, encoded_file_name);
         decompress(encoded_file_name, decoded_file_name);
 
-        std::cout << compare_files(initial_file_name, decoded_file_name) << std::endl;
+        std::cout << (compare_files(initial_file_name, decoded_file_name) ? "success" : "fail") << std::endl;
     }
     return 0;
+//#endif
+//#ifdef COMPRESS
+//    if (argc != 3) {
+//        std::cout << "Wrong arguments. Pass only input and output file as parameters";
+//        return 1;
+//    }
+//    std::string input_file = argv[1];
+//    std::string output_file = argv[2];
+//    compress(input_file, output_file);
+//#endif
+//#ifdef DECOMPRESS
+//    if (argc != 3) {
+//        std::cout << "Wrong arguments. Pass only input and output file as parameters";
+//        return 1;
+//    }
+//    std::string input_file = argv[1];
+//    std::string output_file = argv[2];
+//    decompress(input_file, output_file);
+//#endif
 }
