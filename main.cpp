@@ -135,7 +135,6 @@ void traverse(
 ) {
     if (root->has_value()) {
         code_words[root->value] = code_word;
-//        std::cout << std::endl << root->value;
         return;
     }
     std::vector<bool> left_codeword = code_word;
@@ -192,7 +191,6 @@ std::vector<unsigned char> tree_to_bytes(
     std::vector<unsigned char> result(1);
     size_t bit_index = 7;
     dfs(huffman_tree_root, result, bit_index);
-    std::cout << std::endl;
     return result;
 }
 
@@ -202,11 +200,8 @@ BTree *bytes_to_tree_dfs(
         size_t &bit_index
 ) {
     bool bit = read_bit(encoded_tree, byte_index, bit_index);
-    std::cout << bit;
     if (!bit) {
         unsigned char value = read_byte(encoded_tree, byte_index, bit_index);
-
-        std::cout << value;
 
         auto leaf = new BTree(value);
         return leaf;
@@ -299,7 +294,7 @@ void compress(
         const std::string &initial_file_name,
         const std::string &encoded_file_name
 ) {
-    const auto &[bytes_input, dummy1, dummy2] = read_bytes(initial_file_name);
+    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes(initial_file_name);
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
@@ -311,16 +306,27 @@ void compress(
     auto huffman_data = huffman_result.first;
     auto huffman_tree_root = huffman_result.second;
 
-    write_bytes(encoded_file_name, mtf_data, bwt_shift_position, mtf_data_size);
+    auto huffman_tree_encoded = tree_to_bytes(huffman_tree_root);
+    auto size_of_tree = huffman_tree_encoded.size() * sizeof(unsigned char);
+
+    write_bytes(encoded_file_name, huffman_data, bwt_shift_position, mtf_data_size, size_of_tree, huffman_tree_encoded);
 }
 
 void decompress(
         const std::string &encoded_file_name,
         const std::string &decoded_file_name
 ) {
-    const auto &[encoded_bytes_input, bwt_shift_position, initial_data_size] = read_bytes(encoded_file_name, true);
+    const auto &[encoded_huffman, bwt_shift_position, initial_data_size, huffman_tree_encoded] = read_bytes(
+            encoded_file_name, true);
 
-    auto decoded_mtf = move_to_front_reverse(encoded_bytes_input);
+    auto huffman_tree_decoded = bytes_to_tree(huffman_tree_encoded);
+    auto code_words = build_hashmap(huffman_tree_decoded);
+    auto reversed_code_words = reverse_map(code_words);
+
+    auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
+
+    auto decoded_mtf = move_to_front_reverse(decoded_huffman);
+
     auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
 
     write_bytes(decoded_file_name, decoded_data);
@@ -331,7 +337,7 @@ void full_pipeline(
         const std::string &encoded_file_name,
         const std::string &decoded_file_name
 ) {
-    const auto &[bytes_input, dummy1, dummy2] = read_bytes(initial_file_name);
+    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes(initial_file_name);
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
@@ -339,16 +345,22 @@ void full_pipeline(
     const size_t mtf_data_size = mtf_data.size();
 
     auto huffman_result = huffman(mtf_data);
-    auto code_words = build_hashmap(huffman_result.second);
-
     const auto encoded_huffman = huffman_result.first;
-    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position, mtf_data_size);
 
-    const auto &[encoded_huffman1, bwt_shift_position1, mtf_data_size1] = read_bytes(encoded_file_name, true);
+    auto huffman_tree_root = huffman_result.second;
+    auto huffman_tree_encoded = tree_to_bytes(huffman_tree_root);
+    unsigned long size_of_tree = huffman_tree_encoded.size() * sizeof(unsigned char);
 
+    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position, mtf_data_size, size_of_tree,
+                huffman_tree_encoded);
+
+    const auto &[encoded_huffman1, bwt_shift_position1, mtf_data_size1, huffman_tree_encoded1] = read_bytes(
+            encoded_file_name, true);
+    auto huffman_tree_decoded = bytes_to_tree(huffman_tree_encoded1);
+
+    auto code_words = build_hashmap(huffman_tree_decoded);
     auto reversed_code_words = reverse_map(code_words);
     auto decoded_huffman = huffman_reverse(encoded_huffman1, reversed_code_words, mtf_data_size1);
-
 
     auto decoded_mtf = move_to_front_reverse(decoded_huffman);
     auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position1);
@@ -358,31 +370,21 @@ void full_pipeline(
 
 const int COUNT = 10;
 
-// Function to print binary tree in 2D
-// It does reverse inorder traversal
 void print2DUtil(BTree *root, int space) {
-    // Base case
-    if (root == nullptr)
+    if (root == nullptr) {
         return;
-    // Increase distance between levels
+    }
     space += COUNT;
-    // Process right child first
     print2DUtil(root->right, space);
-
-    // Print current node after space
-    // count
     std::cout << std::endl;
-    for (int i = COUNT; i < space; i++)
+    for (int i = COUNT; i < space; ++i) {
         std::cout << " ";
-    std::cout << root->value << "\n";
-
-    // Process left child
+    }
+    std::cout << root->value << std::endl;
     print2DUtil(root->left, space);
 }
 
-// Wrapper over print2DUtil()
 void print2D(BTree *root) {
-    // Pass initial space count as 0
     print2DUtil(root, 0);
 }
 
@@ -394,44 +396,6 @@ int main() {
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
 
-//    ###########
-    std::string initial_string = "abc";
-    std::vector<unsigned char> initial_data;
-    for (auto c: initial_string) {
-        initial_data.push_back(c);
-    }
-    std::cout << "initial data: ";
-    print_vector(initial_data);
-    std::cout << std::endl;
-    size_t initial_data_size = initial_data.size();
-    auto encoded = huffman(initial_data);
-    const auto huffman_tree = encoded.second;
-
-    std::cout << "\n\n########### TREE ###########";
-    print2D(huffman_tree);
-    std::cout << "########### TREE ###########\n\n";
-
-    const auto encoded_huffman_tree = tree_to_bytes(huffman_tree);
-    print_binary_vector(encoded_huffman_tree);
-    std::cout << std::endl;
-    const auto decoded_huffman_tree_root = bytes_to_tree(encoded_huffman_tree);
-    std::cout << std::endl;
-    std::cout << "\n\n########### TREE ###########";
-    print2D(decoded_huffman_tree_root);
-    std::cout << "########### TREE ###########\n\n";
-
-    const auto hashmap = build_hashmap(decoded_huffman_tree_root);
-    print_map(hashmap);
-
-    auto reversed_map = reverse_map(hashmap);
-
-    auto decoded = huffman_reverse(encoded.first, reversed_map, initial_data_size);
-    print_vector(decoded);
-    std::cout << std::endl;
-
-    return 0;
-    //    ###########
-
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
@@ -441,9 +405,8 @@ int main() {
         encoded_file_name.append(dir).append(current_file + encoding_suffix);
         decoded_file_name.append(dir).append(current_file + decoding_suffix);
 
-//        compress(initial_file_name, encoded_file_name);
-//        decompress(encoded_file_name, decoded_file_name);
-        full_pipeline(initial_file_name, encoded_file_name, decoded_file_name);
+        compress(initial_file_name, encoded_file_name);
+        decompress(encoded_file_name, decoded_file_name);
 
         std::cout << compare_files(initial_file_name, decoded_file_name) << std::endl;
     }

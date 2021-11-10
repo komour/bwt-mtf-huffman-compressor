@@ -8,26 +8,34 @@ void write_bytes(
         const std::string &file_name,
         const std::vector<unsigned char> &data,
         const size_t bwt_shift_position = SIZE_MAX,
-        const size_t initial_data_size = SIZE_MAX
+        const size_t initial_data_size = SIZE_MAX,
+        const unsigned long size_of_tree = SIZE_MAX,
+        const std::vector<unsigned char> &huffman_tree_encoded = std::vector<unsigned char>()
 ) {
     std::ofstream fout(file_name, std::ios::binary);
     if (bwt_shift_position != SIZE_MAX) {
         fout.write(reinterpret_cast<const char *>(&bwt_shift_position), sizeof(size_t));
-    }
-    if (initial_data_size != SIZE_MAX) {
         fout.write(reinterpret_cast<const char *>(&initial_data_size), sizeof(size_t));
+        fout.write(reinterpret_cast<const char *>(&size_of_tree), sizeof(unsigned long));
+        fout.write(
+                reinterpret_cast<const char *>(huffman_tree_encoded.data()),
+                static_cast<long>(huffman_tree_encoded.size())
+        );
     }
     fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
     fout.close();
 }
 
-std::tuple<std::vector<unsigned char>, size_t, size_t> read_bytes(
+std::tuple<std::vector<unsigned char>, size_t, size_t, std::vector<unsigned char>>
+read_bytes(
         const std::string &file_name,
         const bool read_meta = false
 ) {
     size_t initial_data_size = SIZE_MAX;
     size_t bwt_shift_position = SIZE_MAX;
+    long size_of_tree = SIZE_MAX;
     std::vector<unsigned char> data;
+    std::vector<unsigned char> huffman_tree_encoded;
 
     std::ifstream fin(file_name, std::ios::binary);
     std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
@@ -36,11 +44,14 @@ std::tuple<std::vector<unsigned char>, size_t, size_t> read_bytes(
     if (read_meta) {
         bwt_shift_position = *((size_t *) bytes.data());
         initial_data_size = *((size_t *) bytes.data() + 1);
-        data = std::vector(bytes.begin() + 2 * sizeof(size_t), bytes.end());
+        size_of_tree = *((long *) bytes.data() + 2);
+        auto begin_tree_it = bytes.begin() + 2 * sizeof(size_t) + sizeof(unsigned long);
+        huffman_tree_encoded = std::vector(begin_tree_it, begin_tree_it + size_of_tree);
+        data = std::vector(begin_tree_it + size_of_tree, bytes.end());
     } else {
         data = bytes;
     }
-    return {data, bwt_shift_position, initial_data_size};
+    return {data, bwt_shift_position, initial_data_size, huffman_tree_encoded};
 }
 
 bool get_bit(unsigned char byte, size_t bit_number) {
@@ -90,7 +101,7 @@ void append_byte(std::vector<unsigned char> &output_data, size_t &bit_index, con
 }
 
 void append_byte(std::vector<unsigned char> &output_data, size_t &bit_index, const std::vector<bool> &code_word) {
-    for (const auto &bit : code_word) {
+    for (const auto &bit: code_word) {
         append_bit(output_data, bit_index, bit);
     }
 }
