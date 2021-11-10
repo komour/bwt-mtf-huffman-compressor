@@ -405,10 +405,11 @@ void print_metrics(
         const size_t &encoded_data_size
 ) {
     std::cout << "file_name: " << output_file
-              << " $$ bits_avg: " << (8 * double(encoded_data_size)) / (double(initial_data_size))
+              << " $$ initial_data_size: " << initial_data_size
               << " $$ encoded_file_size: " << encoded_data_size
-              << " $$ compress_rate = " << (double(initial_data_size)) / (double(encoded_data_size))
-              << std::endl;
+              << " $$ bits_avg: " << (8 * double(encoded_data_size)) / (double(initial_data_size))
+              << " $$ compress_rate = " << (double(encoded_data_size)) / (double(initial_data_size))
+            << std::endl;
 }
 
 int main(int argc, char *argv[]) {
