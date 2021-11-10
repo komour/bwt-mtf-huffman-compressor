@@ -60,11 +60,37 @@ bool read_bit(
     return get_bit(byte, 8 - bit_index++);
 }
 
-void append_bit(std::vector<unsigned char> &output_data, size_t &first_free_pos, const bool &bit) {
-    if (first_free_pos == -1) {
-        output_data.push_back(0);
-        first_free_pos = 7;
+unsigned char read_byte(
+        const std::vector<unsigned char> &data,
+        size_t &byte_index,
+        size_t &bit_index
+) {
+    unsigned char byte = 0u;
+    for (size_t i = 0; i < 8; ++i) {
+        bool bit = read_bit(data, byte_index, bit_index);
+        byte |= bit << (7 - i);
     }
-    output_data[output_data.size() - 1] |= bit << first_free_pos;
-    --first_free_pos;
+    return byte;
+}
+
+void append_bit(std::vector<unsigned char> &output_data, size_t &bit_index, const bool &bit) {
+    if (bit_index == -1) {
+        output_data.push_back(0);
+        bit_index = 7;
+    }
+    output_data[output_data.size() - 1] |= bit << bit_index;
+    --bit_index;
+}
+
+void append_byte(std::vector<unsigned char> &output_data, size_t &bit_index, const unsigned char &byte) {
+    for (size_t i = 8; i > 0; --i) {
+        bool bit = get_bit(byte, i);
+        append_bit(output_data, bit_index, bit);
+    }
+}
+
+void append_byte(std::vector<unsigned char> &output_data, size_t &bit_index, const std::vector<bool> &code_word) {
+    for (const auto &bit : code_word) {
+        append_bit(output_data, bit_index, bit);
+    }
 }

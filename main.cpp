@@ -19,8 +19,6 @@ struct BTree {
         return !this->left && !this->right;
     }
 
-    BTree() : left(nullptr), right(nullptr), value(0) {}
-
     explicit BTree(unsigned char byte_value = 0, BTree *left = nullptr, BTree *right = nullptr) :
             left(left), right(right), value(byte_value) {}
 
@@ -137,6 +135,7 @@ void traverse(
 ) {
     if (root->has_value()) {
         code_words[root->value] = code_word;
+//        std::cout << std::endl << root->value;
         return;
     }
     std::vector<bool> left_codeword = code_word;
@@ -158,11 +157,11 @@ std::unordered_map<unsigned char, std::vector<bool>> build_hashmap(
 
 std::vector<unsigned char> encode_with_huffman(
         const std::vector<unsigned char> &data,
-        std::unordered_map<unsigned char, std::vector<bool>> &code_words
+        BTree *huffman_tree_root
 ) {
     auto encoded_data = std::vector<unsigned char>(1);
     size_t first_free_pos = 7;
-
+    auto code_words = build_hashmap(huffman_tree_root);
     for (const auto &byte: data) {
         const auto &code_word = code_words[byte];
         for (bool bit: code_word) {
@@ -172,17 +171,75 @@ std::vector<unsigned char> encode_with_huffman(
     return encoded_data;
 }
 
-std::pair<std::vector<unsigned char>, std::unordered_map<unsigned char, std::vector<bool>>>
+void dfs(
+        BTree *node,
+        std::vector<unsigned char> &result,
+        size_t &bit_index
+) {
+    if (node->has_value()) {
+        append_bit(result, bit_index, 0);
+        append_byte(result, bit_index, node->value);
+        return;
+    }
+    append_bit(result, bit_index, 1);
+    dfs(node->left, result, bit_index);
+    dfs(node->right, result, bit_index);
+}
+
+std::vector<unsigned char> tree_to_bytes(
+        BTree *huffman_tree_root
+) {
+    std::vector<unsigned char> result(1);
+    size_t bit_index = 7;
+    dfs(huffman_tree_root, result, bit_index);
+    std::cout << std::endl;
+    return result;
+}
+
+BTree *bytes_to_tree_dfs(
+        const std::vector<unsigned char> &encoded_tree,
+        size_t &byte_index,
+        size_t &bit_index
+) {
+    bool bit = read_bit(encoded_tree, byte_index, bit_index);
+    std::cout << bit;
+    if (!bit) {
+        unsigned char value = read_byte(encoded_tree, byte_index, bit_index);
+
+        std::cout << value;
+
+        auto leaf = new BTree(value);
+        return leaf;
+    }
+
+    auto node = new BTree();
+    auto left = bytes_to_tree_dfs(encoded_tree, byte_index, bit_index);
+    node->left = new BTree(left->value, left->left, left->right);
+
+    auto right = bytes_to_tree_dfs(encoded_tree, byte_index, bit_index);
+    node->right = new BTree(right->value, right->left, right->right);
+
+    return node;
+}
+
+BTree *bytes_to_tree(
+        const std::vector<unsigned char> &encoded_tree
+) {
+    size_t byte_index = 0;
+    size_t bit_index = 0;
+    return bytes_to_tree_dfs(encoded_tree, byte_index, bit_index);
+}
+
+std::pair<std::vector<unsigned char>, BTree *>
 huffman(const std::vector<unsigned char> &data) {
     std::vector<long> frequencies(BYTE_SIZE, 0);
     std::priority_queue<std::pair<long, BTree *>> vertex_pool;
 
     std::vector<bool> already_in_queue(BYTE_SIZE);
-    for (unsigned char c: data) {
-        ++frequencies[c];
+    for (const unsigned char &byte: data) {
+        ++frequencies[byte];
     }
-
-    for (unsigned char byte: data) {
+    for (const unsigned char &byte: data) {
         if (!already_in_queue[byte] && frequencies[byte] != 0) {
             auto new_vertex = new BTree(byte);
             vertex_pool.push(std::make_pair(-frequencies[byte], new_vertex));
@@ -199,9 +256,8 @@ huffman(const std::vector<unsigned char> &data) {
         auto new_node = new BTree(0, left.second, right.second);
         vertex_pool.push(std::make_pair(new_freq, new_node));
     }
-    auto code_words = build_hashmap(vertex_pool.top().second);
-    auto encoded_data = encode_with_huffman(data, code_words);
-    return std::make_pair(encoded_data, code_words);
+    auto encoded_data = encode_with_huffman(data, vertex_pool.top().second);
+    return std::make_pair(encoded_data, vertex_pool.top().second);
 }
 
 std::vector<unsigned char> huffman_reverse(
@@ -230,7 +286,7 @@ std::vector<unsigned char> huffman_reverse(
 
 template<class K, class V>
 std::unordered_map<V, K> reverse_map(
-        std::unordered_map<K, V> &map
+        const std::unordered_map<K, V> &map
 ) {
     std::unordered_map<V, K> new_map;
     for (const auto &pair: map) {
@@ -253,7 +309,7 @@ void compress(
 
     auto huffman_result = huffman(mtf_data);
     auto huffman_data = huffman_result.first;
-    auto code_words = huffman_result.second;
+    auto huffman_tree_root = huffman_result.second;
 
     write_bytes(encoded_file_name, mtf_data, bwt_shift_position, mtf_data_size);
 }
@@ -279,18 +335,16 @@ void full_pipeline(
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
-
     auto mtf_data = move_to_front(bwt_data);
     const size_t mtf_data_size = mtf_data.size();
 
     auto huffman_result = huffman(mtf_data);
-    auto code_words = huffman_result.second;
+    auto code_words = build_hashmap(huffman_result.second);
+
     const auto encoded_huffman = huffman_result.first;
     write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position, mtf_data_size);
 
     const auto &[encoded_huffman1, bwt_shift_position1, mtf_data_size1] = read_bytes(encoded_file_name, true);
-    std::cout << bwt_shift_position << ' ' << mtf_data_size << std::endl;
-    std::cout << bwt_shift_position1 << ' ' << mtf_data_size1 << std::endl;
 
     auto reversed_code_words = reverse_map(code_words);
     auto decoded_huffman = huffman_reverse(encoded_huffman1, reversed_code_words, mtf_data_size1);
@@ -301,6 +355,37 @@ void full_pipeline(
     write_bytes(decoded_file_name, decoded_data);
 }
 
+
+const int COUNT = 10;
+
+// Function to print binary tree in 2D
+// It does reverse inorder traversal
+void print2DUtil(BTree *root, int space) {
+    // Base case
+    if (root == nullptr)
+        return;
+    // Increase distance between levels
+    space += COUNT;
+    // Process right child first
+    print2DUtil(root->right, space);
+
+    // Print current node after space
+    // count
+    std::cout << std::endl;
+    for (int i = COUNT; i < space; i++)
+        std::cout << " ";
+    std::cout << root->value << "\n";
+
+    // Process left child
+    print2DUtil(root->left, space);
+}
+
+// Wrapper over print2DUtil()
+void print2D(BTree *root) {
+    // Pass initial space count as 0
+    print2DUtil(root, 0);
+}
+
 int main() {
     std::string dir = "calgarycorpus/";
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
@@ -308,6 +393,44 @@ int main() {
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
+
+//    ###########
+    std::string initial_string = "abc";
+    std::vector<unsigned char> initial_data;
+    for (auto c: initial_string) {
+        initial_data.push_back(c);
+    }
+    std::cout << "initial data: ";
+    print_vector(initial_data);
+    std::cout << std::endl;
+    size_t initial_data_size = initial_data.size();
+    auto encoded = huffman(initial_data);
+    const auto huffman_tree = encoded.second;
+
+    std::cout << "\n\n########### TREE ###########";
+    print2D(huffman_tree);
+    std::cout << "########### TREE ###########\n\n";
+
+    const auto encoded_huffman_tree = tree_to_bytes(huffman_tree);
+    print_binary_vector(encoded_huffman_tree);
+    std::cout << std::endl;
+    const auto decoded_huffman_tree_root = bytes_to_tree(encoded_huffman_tree);
+    std::cout << std::endl;
+    std::cout << "\n\n########### TREE ###########";
+    print2D(decoded_huffman_tree_root);
+    std::cout << "########### TREE ###########\n\n";
+
+    const auto hashmap = build_hashmap(decoded_huffman_tree_root);
+    print_map(hashmap);
+
+    auto reversed_map = reverse_map(hashmap);
+
+    auto decoded = huffman_reverse(encoded.first, reversed_map, initial_data_size);
+    print_vector(decoded);
+    std::cout << std::endl;
+
+    return 0;
+    //    ###########
 
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
