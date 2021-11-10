@@ -1,0 +1,44 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/asap/CLionProjects/BWT-MTF-Huffman/debug_utilities.h
+fstream
+-
+iostream
+-
+unordered_map
+-
+vector
+-
+
+/Users/asap/CLionProjects/BWT-MTF-Huffman/io_utilities.h
+iostream
+-
+vector
+-
+fstream
+-
+
+/Users/asap/CLionProjects/BWT-MTF-Huffman/main.cpp
+debug_utilities.h
+/Users/asap/CLionProjects/BWT-MTF-Huffman/debug_utilities.h
+io_utilities.h
+/Users/asap/CLionProjects/BWT-MTF-Huffman/io_utilities.h
+iostream
+-
+vector
+-
+numeric
+-
+queue
+-
+unordered_map
+-
+map
+-
+

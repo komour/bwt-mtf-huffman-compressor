@@ -412,7 +412,7 @@ void print_metrics(
 }
 
 int main(int argc, char *argv[]) {
-//#ifdef FULLPIPELINE
+#ifdef FULL_PIPELINE
     std::string dir = "calgarycorpus/";
     std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
                                           "pic", "progc", "progl", "progp", "trans"};
@@ -434,24 +434,23 @@ int main(int argc, char *argv[]) {
 
         std::cout << (compare_files(initial_file_name, decoded_file_name) ? "success" : "fail") << std::endl;
     }
-    return 0;
-//#endif
-//#ifdef COMPRESS
-//    if (argc != 3) {
-//        std::cout << "Wrong arguments. Pass only input and output file as parameters";
-//        return 1;
-//    }
-//    std::string input_file = argv[1];
-//    std::string output_file = argv[2];
-//    compress(input_file, output_file);
-//#endif
-//#ifdef DECOMPRESS
-//    if (argc != 3) {
-//        std::cout << "Wrong arguments. Pass only input and output file as parameters";
-//        return 1;
-//    }
-//    std::string input_file = argv[1];
-//    std::string output_file = argv[2];
-//    decompress(input_file, output_file);
-//#endif
+#endif
+#ifdef COMPRESS
+    if (argc != 3) {
+        std::cout << "Wrong arguments. Pass only input and output file as parameters";
+        return 1;
+    }
+    std::string input_file = argv[1];
+    std::string output_file = argv[2];
+    compress(input_file, output_file);
+#endif
+#ifdef DECOMPRESS
+    if (argc != 3) {
+        std::cout << "Wrong arguments. Pass only input and output file as parameters";
+        return 1;
+    }
+    std::string input_file = argv[1];
+    std::string output_file = argv[2];
+    decompress(input_file, output_file);
+#endif
 }
