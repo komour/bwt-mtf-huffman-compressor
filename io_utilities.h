@@ -43,10 +43,14 @@ read_bytes(
 
     if (read_meta) {
         bwt_shift_position = *((size_t *) bytes.data());
+//        std::cout << "\nbwt_shift_position = " << bwt_shift_position << '\n';
         initial_data_size = *((size_t *) bytes.data() + 1);
+//        std::cout << "\ninitial_data_size = " << initial_data_size << '\n';
         size_of_tree = *((long *) bytes.data() + 2);
+//        std::cout << "\nsize_of_tree = " << size_of_tree << '\n';
         auto begin_tree_it = bytes.begin() + 2 * sizeof(size_t) + sizeof(unsigned long);
         huffman_tree_encoded = std::vector(begin_tree_it, begin_tree_it + size_of_tree);
+//        std::cout << std::endl << size_of_tree << std::endl;
         data = std::vector(begin_tree_it + size_of_tree, bytes.end());
     } else {
         data = bytes;

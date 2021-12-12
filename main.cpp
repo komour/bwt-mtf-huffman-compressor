@@ -90,6 +90,64 @@ std::pair<size_t, std::vector<unsigned char>> bwt(
     return std::make_pair(shift_position, encoded);
 }
 
+
+std::vector<unsigned char> rle_encode(
+        const std::vector<unsigned char> &data
+) {
+    std::vector<unsigned char> encoded_data;
+
+    unsigned char sequence_length = 0;
+    unsigned char previous_byte = data[0];
+    encoded_data.push_back(previous_byte);
+
+    for (size_t i = 1; i < data.size(); ++i) {
+        if (previous_byte == data[i] && sequence_length < 255) {
+            ++sequence_length;
+            if (sequence_length == 1) {
+                encoded_data.push_back(previous_byte);
+//                std::cout << "AAAAAAAA\n";
+            }
+            if (i == data.size() - 1) {
+                encoded_data.push_back(sequence_length - 1);
+            }
+        } else if (sequence_length > 0) {
+            encoded_data.push_back(sequence_length - 1);
+            sequence_length = 0;
+            previous_byte = data[i];
+            encoded_data.push_back(previous_byte);
+        } else {
+            encoded_data.push_back(data[i]);
+            previous_byte = data[i];
+        }
+    }
+    return encoded_data;
+}
+
+std::vector<unsigned char> rle_decode(
+        const std::vector<unsigned char> &data
+) {
+    std::vector<unsigned char> decoded_data;
+    unsigned char previous_byte = data[0];
+    bool is_previous_byte_read = true;
+    decoded_data.push_back(previous_byte);
+    for (size_t i = 1; i < data.size(); ++i) {
+        if (data[i] == previous_byte && is_previous_byte_read) {
+            decoded_data.push_back(previous_byte);
+            for (unsigned char j = 0; j < data[i + 1]; ++j) {
+                decoded_data.push_back(previous_byte);
+            }
+            ++i;
+            is_previous_byte_read = false;
+        } else {
+            previous_byte = data[i];
+            is_previous_byte_read = true;
+            decoded_data.push_back(data[i]);
+        }
+    }
+
+    return decoded_data;
+}
+
 std::vector<unsigned char> move_to_front(
         std::vector<unsigned char> data
 ) {
@@ -307,9 +365,11 @@ void compress(
     auto bwt_shift_position = bwt_result.first;
 
     auto mtf_data = move_to_front(bwt_data);
-    size_t mtf_data_size = mtf_data.size();
+//    size_t mtf_data_size = mtf_data.size();
+    auto encoded_rle = rle_encode(mtf_data);
+    size_t mtf_data_size = encoded_rle.size();
 
-    auto huffman_result = huffman(mtf_data);
+    auto huffman_result = huffman(encoded_rle);
     auto huffman_data = huffman_result.first;
     auto huffman_tree_root = huffman_result.second;
 
@@ -320,28 +380,44 @@ void compress(
     encoded_data_size += 2 * sizeof(size_t) + sizeof(unsigned long);
     std::cout << "header size: " << double(encoded_data_size) << " $$ ";
     encoded_data_size += sizeof(unsigned char) * huffman_data.size();
-    print_metrics(encoded_file_name, bytes_input.size(), encoded_data_size);
-    write_bytes(encoded_file_name, huffman_data, bwt_shift_position, mtf_data_size, size_of_tree, huffman_tree_encoded);
+    if (encoded_data_size + 1 < bytes_input.size()) {
+        write_bytes(encoded_file_name, huffman_data, bwt_shift_position, mtf_data_size, size_of_tree,
+                    huffman_tree_encoded);
+        print_metrics(encoded_file_name, bytes_input.size(), encoded_data_size);
+    } else {
+        auto encoded2 = bytes_input;
+        encoded2.push_back(255);
+        print_metrics(encoded_file_name, bytes_input.size(), encoded2.size());
+        std::ofstream fout(encoded_file_name, std::ios::binary);
+        fout.write(reinterpret_cast<const char *>(encoded2.data()), static_cast<long>(encoded2.size()));
+    }
 }
 
 void decompress(
         const std::string &encoded_file_name,
         const std::string &decoded_file_name
 ) {
-    const auto &[encoded_huffman, bwt_shift_position, initial_data_size, huffman_tree_encoded] = read_bytes(
-            encoded_file_name, true);
+    std::ifstream fin(encoded_file_name, std::ios::binary);
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
+    if (bytes[bytes.size() - 1] == 255) {
+        auto result = bytes;
+        result.pop_back();
+        write_bytes(decoded_file_name, result);
+    } else {
+        const auto &[encoded_huffman, bwt_shift_position, initial_data_size, huffman_tree_encoded] = read_bytes(
+                encoded_file_name, true);
+        auto huffman_tree_decoded = bytes_to_tree(huffman_tree_encoded);
+        auto code_words = build_hashmap(huffman_tree_decoded);
+        auto reversed_code_words = reverse_map(code_words);
 
-    auto huffman_tree_decoded = bytes_to_tree(huffman_tree_encoded);
-    auto code_words = build_hashmap(huffman_tree_decoded);
-    auto reversed_code_words = reverse_map(code_words);
+        auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
+        auto decoded_rle = rle_decode(decoded_huffman);
+        auto decoded_mtf = move_to_front_reverse(decoded_rle);
 
-    auto decoded_huffman = huffman_reverse(encoded_huffman, reversed_code_words, initial_data_size);
+        auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
 
-    auto decoded_mtf = move_to_front_reverse(decoded_huffman);
-
-    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
-
-    write_bytes(decoded_file_name, decoded_data);
+        write_bytes(decoded_file_name, decoded_data);
+    }
 }
 
 void full_pipeline(
@@ -399,11 +475,14 @@ void print2D(BTree *root) {
     print2DUtil(root, 0);
 }
 
+double stat = 0;
+
 void print_metrics(
         const std::string &output_file,
         const size_t &initial_data_size,
         const size_t &encoded_data_size
 ) {
+    stat += (double(encoded_data_size)) / (double(initial_data_size));
     std::cout << "file_name: " << output_file
               << " $$ initial_data_size: " << initial_data_size
               << " $$ encoded_file_size: " << encoded_data_size
@@ -414,12 +493,43 @@ void print_metrics(
 
 int main(int argc, char *argv[]) {
 #ifdef FULL_PIPELINE
-    std::string dir = "calgarycorpus/";
-    std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
-                                          "pic", "progc", "progl", "progp", "trans"};
+//    std::string dir = "calgarycorpus/";
+//    std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
+//                                          "pic", "progc", "progl", "progp", "trans"};
+    std::string dir = "jpeg30/";
+    std::vector<std::string> file_list = {"airplane30.jpg", "arctichare30.jpg", "baboon30.jpg",
+                                          "cat30.jpg", "fruits30.jpg", "frymire30.jpg",
+                                          "girl30.jpg", "lena30.jpg", "monarch30.jpg",
+                                          "peppers30.jpg", "pool30.jpg", "sails30.jpg", "serrano30.jpg",
+                                          "tulips30.jpg", "watch30.jpg"};
+//    std::string dir = "jpeg80/";
+//    std::vector<std::string> file_list = {"airplane80.jpg", "arctichare80.jpg", "baboon80.jpg",
+//                                          "cat80.jpg", "fruits80.jpg", "frymire80.jpg",
+//                                          "girl80.jpg", "lena80.jpg", "monarch80.jpg",
+//                                          "peppers80.jpg", "pool80.jpg", "sails80.jpg", "serrano80.jpg",
+//                                          "tulips80.jpg", "watch80.jpg"};
+
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
+
+//    testing
+//    std::string test_string = "kek";
+//    std::vector<unsigned char> bytes_input;
+//    for (unsigned char c: test_string) {
+//        bytes_input.push_back(c);
+//    }
+//    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes("jpeg30/pool30.jpg");
+//    std::cout << std::endl;
+//    auto encoded = rle_encode(bytes_input);
+//    std::cout << std::endl;
+//    auto decoded = rle_decode(encoded);
+//    print_vector(bytes_input);
+//    std::cout << std::endl;
+//    print_vector(decoded);
+//    std::cout << std::endl;
+//    std::cout << bytes_input.size() << " " << encoded.size() << " " << decoded.size() << std::endl;
+//    return 0;
 
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
@@ -435,6 +545,7 @@ int main(int argc, char *argv[]) {
 
         std::cout << (compare_files(initial_file_name, decoded_file_name) ? "success" : "fail") << std::endl;
     }
+    std::cout << stat / 15 << '\n';
 #endif
 #ifdef COMPRESS
     if (argc != 3) {
