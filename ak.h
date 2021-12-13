@@ -45,7 +45,7 @@ public:
 
     void halve_all_frequencies_if_exceeded() {
         if (cum[0] == MAX_FREQUENCY) {
-            int current_cum = 0;
+            uint16_t current_cum = 0;
             for (int i = NUMBER_OF_SYMBOLS; i >= 0; --i) {
                 freq[i] = (freq[i] + 1) / 2;
                 cum[i] = current_cum;
@@ -60,8 +60,8 @@ public:
         update_frequencies(new_symbol_index);
     }
 
-    int update_symbol_index_if_needed(int symbol_index) {
-        int new_symbol_index = symbol_index;
+    uint16_t update_symbol_index_if_needed(uint16_t symbol_index) {
+        uint16_t new_symbol_index = symbol_index;
         while (freq[new_symbol_index] == freq[new_symbol_index - 1]) {
             --new_symbol_index;
         }
@@ -79,7 +79,7 @@ public:
         return new_symbol_index;
     }
 
-    void update_frequencies(int symbol_index) {
+    void update_frequencies(uint16_t symbol_index) {
         ++freq[symbol_index];
         uint16_t index_to_update = symbol_index;
         while (index_to_update) {
@@ -99,9 +99,9 @@ public:
     std::vector<unsigned char> encoded_data = std::vector<unsigned char>(1);
     std::vector<unsigned char> initial_data;
     A0FrequencyModel frequency_model = A0FrequencyModel();
-    int low = 0;
-    int high = CODE_VALUE_MAX;
-    int bits_to_follow = 0;
+    uint16_t low = 0;
+    uint16_t high = CODE_VALUE_MAX;
+    uint16_t bits_to_follow = 0;
     size_t first_free_pos = 7;
 
 
@@ -116,7 +116,7 @@ public:
 
 
     void encode_next(uint16_t symbol_index) {
-        long range = 1 + high - low;
+        uint32_t range = 1 + high - low;
         uint16_t total = frequency_model.cum[0];
         uint16_t symbol_low = frequency_model.cum[symbol_index];
         uint16_t symbol_high = frequency_model.cum[symbol_index - 1];
@@ -161,7 +161,7 @@ class A0DecoderWriter {
 public:
     explicit A0DecoderWriter(std::vector<unsigned char> encoded_data) {
         this->encoded_data = encoded_data;
-        for (int i = 0; i < CODE_VALUE_BITS; ++i) {
+        for (size_t i = 0; i < CODE_VALUE_BITS; ++i) {
             bool next_bit = read_bit(encoded_data, byte_index, bit_index);
             code_value *= 2;
             code_value += next_bit;
@@ -179,20 +179,20 @@ public:
     size_t bit_index = 0;
     size_t first_free_pos = 7;
 
-    int next_symbol_index() {
-        int range = high - low + 1;
-        int total = frequency_model.cum[0];
-        int cum = ((code_value - low + 1) * total - 1) / range;
+    uint16_t next_symbol_index() {
+        uint32_t range = high - low + 1;
+        uint16_t total = frequency_model.cum[0];
+        uint16_t cum = ((code_value - low + 1) * total - 1) / range;
 
-        int symbol_index = 1;
+        uint16_t symbol_index = 1;
         while (frequency_model.cum[symbol_index] > cum) {
             ++symbol_index;
         }
 
-        int symbolLow = frequency_model.cum[symbol_index];
-        int symbolHigh = frequency_model.cum[symbol_index - 1];
-        high = low + range * symbolHigh / total - 1;
-        low = low + range * symbolLow / total;
+        uint16_t symbol_low = frequency_model.cum[symbol_index];
+        uint16_t symbol_high = frequency_model.cum[symbol_index - 1];
+        high = low + range * symbol_high / total - 1;
+        low = low + range * symbol_low / total;
 
         for (;;) {
             if (high < CODE_VALUE_HALF) {
