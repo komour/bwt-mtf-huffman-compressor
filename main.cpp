@@ -545,7 +545,7 @@ int main(int argc, char *argv[]) {
 //    std::cout << std::endl;
 //    std::cout << bytes_input.size() << " " << encoded.size() << " " << decoded.size() << std::endl;
 //    return 0;
-
+    bool all_tests_passed = true;
     for (auto &current_file: file_list) {
         std::cout << counter << "/" << file_list.size() << ' ';
         ++counter;
@@ -558,9 +558,11 @@ int main(int argc, char *argv[]) {
         compress_ak(initial_file_name, encoded_file_name);
         decompress_ak(encoded_file_name, decoded_file_name);
 
-        std::cout << (compare_files(initial_file_name, decoded_file_name) ? "success" : "fail") << std::endl;
+        bool operation_succeeded = compare_files(initial_file_name, decoded_file_name);
+        all_tests_passed &= operation_succeeded;
+        std::cout << (operation_succeeded ? "success" : "fail") << std::endl;
     }
-    std::cout << stat / 15 << '\n';
+    std::cout << (all_tests_passed ? "✅ all tests passed 😮‍💨" : "‼️ tests failed ❌") << " $$ compression rate = " << stat / 15 << '\n';
 #endif
 #ifdef COMPRESS
     if (argc != 3) {
