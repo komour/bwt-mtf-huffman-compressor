@@ -154,7 +154,9 @@ std::vector<unsigned char> ak_encode(
     encode_next(EOF_SYMBOL, frequency_model, high, low, encoded_data, first_free_pos, bits_to_follow);
     ++bits_to_follow;
 
-    write_bit_with_follow(encoded_data, false, first_free_pos, bits_to_follow);
+    bool last_bit;
+    low < CODE_VALUE_FIRST_QUARTER ? last_bit = false : last_bit = true;
+    write_bit_with_follow(encoded_data, last_bit, first_free_pos, bits_to_follow);
     return encoded_data;
 }
 
