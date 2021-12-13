@@ -43,19 +43,50 @@ read_bytes(
 
     if (read_meta) {
         bwt_shift_position = *((size_t *) bytes.data());
-//        std::cout << "\nbwt_shift_position = " << bwt_shift_position << '\n';
         initial_data_size = *((size_t *) bytes.data() + 1);
-//        std::cout << "\ninitial_data_size = " << initial_data_size << '\n';
         size_of_tree = *((long *) bytes.data() + 2);
-//        std::cout << "\nsize_of_tree = " << size_of_tree << '\n';
         auto begin_tree_it = bytes.begin() + 2 * sizeof(size_t) + sizeof(unsigned long);
         huffman_tree_encoded = std::vector(begin_tree_it, begin_tree_it + size_of_tree);
-//        std::cout << std::endl << size_of_tree << std::endl;
         data = std::vector(begin_tree_it + size_of_tree, bytes.end());
     } else {
         data = bytes;
     }
     return {data, bwt_shift_position, initial_data_size, huffman_tree_encoded};
+}
+
+void write_bytes_ak(
+        const std::string &file_name,
+        const std::vector<unsigned char> &data,
+        const size_t bwt_shift_position = SIZE_MAX
+) {
+    std::ofstream fout(file_name, std::ios::binary);
+    if (bwt_shift_position != SIZE_MAX) {
+        fout.write(reinterpret_cast<const char *>(&bwt_shift_position), sizeof(size_t));
+    }
+    fout.write(reinterpret_cast<const char *>(data.data()), static_cast<long>(data.size()));
+    fout.close();
+}
+
+std::tuple<std::vector<unsigned char>, size_t>
+read_bytes_ak(
+        const std::string &file_name,
+        const bool read_meta = false
+) {
+    size_t bwt_shift_position = SIZE_MAX;
+    std::vector<unsigned char> data;
+
+    std::ifstream fin(file_name, std::ios::binary);
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
+    fin.close();
+
+    if (read_meta) {
+        bwt_shift_position = *((size_t *) bytes.data());
+        auto begin_data_it = bytes.begin() + sizeof(size_t);
+        data = std::vector(begin_data_it, bytes.end());
+    } else {
+        data = bytes;
+    }
+    return {data, bwt_shift_position};
 }
 
 bool get_bit(unsigned char byte, size_t bit_number) {

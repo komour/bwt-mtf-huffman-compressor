@@ -1,5 +1,6 @@
 #include "debug_utilities.h"
 #include "io_utilities.h"
+#include "ak.h"
 
 #include <iostream>
 #include <vector>
@@ -105,7 +106,6 @@ std::vector<unsigned char> rle_encode(
             ++sequence_length;
             if (sequence_length == 1) {
                 encoded_data.push_back(previous_byte);
-//                std::cout << "AAAAAAAA\n";
             }
             if (i == data.size() - 1) {
                 encoded_data.push_back(sequence_length - 1);
@@ -420,39 +420,54 @@ void decompress(
     }
 }
 
-void full_pipeline(
+void compress_ak(
         const std::string &initial_file_name,
-        const std::string &encoded_file_name,
-        const std::string &decoded_file_name
+        const std::string &encoded_file_name
 ) {
-    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes(initial_file_name);
+    const auto &[bytes_input, dummy1] = read_bytes_ak(initial_file_name);
     auto bwt_result = bwt(bytes_input);
     auto bwt_data = bwt_result.second;
     auto bwt_shift_position = bwt_result.first;
     auto mtf_data = move_to_front(bwt_data);
-    const size_t mtf_data_size = mtf_data.size();
+    auto encoded_rle = rle_encode(mtf_data);
 
-    auto huffman_result = huffman(mtf_data);
-    const auto encoded_huffman = huffman_result.first;
+    auto ak_data = ak_encode(encoded_rle);
 
-    auto huffman_tree_root = huffman_result.second;
-    auto huffman_tree_encoded = tree_to_bytes(huffman_tree_root);
-    unsigned long size_of_tree = huffman_tree_encoded.size() * sizeof(unsigned char);
+    size_t encoded_data_size = sizeof(size_t);
+    std::cout << "header size: " << double(encoded_data_size) << " $$ ";
+    encoded_data_size += sizeof(unsigned char) * ak_data.size();
 
-    write_bytes(encoded_file_name, encoded_huffman, bwt_shift_position, mtf_data_size, size_of_tree,
-                huffman_tree_encoded);
+    if (encoded_data_size + 1 < bytes_input.size()) {
+        write_bytes_ak(encoded_file_name, ak_data, bwt_shift_position);
+        print_metrics(encoded_file_name, bytes_input.size(), encoded_data_size);
+    } else {
+        auto encoded2 = bytes_input;
+        encoded2.push_back(255);
+        print_metrics(encoded_file_name, bytes_input.size(), encoded2.size());
+        std::ofstream fout(encoded_file_name, std::ios::binary);
+        fout.write(reinterpret_cast<const char *>(encoded2.data()), static_cast<long>(encoded2.size()));
+    }
+}
 
-    const auto &[encoded_huffman1, bwt_shift_position1, mtf_data_size1, huffman_tree_encoded1] = read_bytes(
-            encoded_file_name, true);
-    auto huffman_tree_decoded = bytes_to_tree(huffman_tree_encoded1);
-
-    auto code_words = build_hashmap(huffman_tree_decoded);
-    auto reversed_code_words = reverse_map(code_words);
-    auto decoded_huffman = huffman_reverse(encoded_huffman1, reversed_code_words, mtf_data_size1);
-
-    auto decoded_mtf = move_to_front_reverse(decoded_huffman);
-    auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position1);
-    write_bytes(decoded_file_name, decoded_data);
+void decompress_ak(
+        const std::string &encoded_file_name,
+        const std::string &decoded_file_name
+) {
+    std::ifstream fin(encoded_file_name, std::ios::binary);
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(fin)), {});
+    if (bytes[bytes.size() - 1] == 255) {
+        auto result = bytes;
+        result.pop_back();
+        write_bytes(decoded_file_name, result);
+    } else {
+        const auto &[encoded_ak, bwt_shift_position] = read_bytes_ak(
+                encoded_file_name, true);
+        auto decoded_ak = ak_decode(encoded_ak);
+        auto decoded_rle = rle_decode(decoded_ak);
+        auto decoded_mtf = move_to_front_reverse(decoded_rle);
+        auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
+        write_bytes(decoded_file_name, decoded_data);
+    }
 }
 
 const int COUNT = 10;
@@ -514,18 +529,18 @@ int main(int argc, char *argv[]) {
     size_t counter = 1;
 
 //    testing
-//    std::string test_string = "kek";
+//    std::string test_string = "abacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 //    std::vector<unsigned char> bytes_input;
 //    for (unsigned char c: test_string) {
 //        bytes_input.push_back(c);
 //    }
 //    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes("jpeg30/pool30.jpg");
-//    std::cout << std::endl;
-//    auto encoded = rle_encode(bytes_input);
-//    std::cout << std::endl;
-//    auto decoded = rle_decode(encoded);
 //    print_vector(bytes_input);
 //    std::cout << std::endl;
+//    auto encoded = ak_encode(bytes_input);
+//    print_vector(encoded);
+//    std::cout << std::endl;
+//    auto decoded = ak_decode(encoded);
 //    print_vector(decoded);
 //    std::cout << std::endl;
 //    std::cout << bytes_input.size() << " " << encoded.size() << " " << decoded.size() << std::endl;
@@ -540,8 +555,8 @@ int main(int argc, char *argv[]) {
         encoded_file_name.append(dir).append(current_file + encoding_suffix);
         decoded_file_name.append(dir).append(current_file + decoding_suffix);
 
-        compress(initial_file_name, encoded_file_name);
-        decompress(encoded_file_name, decoded_file_name);
+        compress_ak(initial_file_name, encoded_file_name);
+        decompress_ak(encoded_file_name, decoded_file_name);
 
         std::cout << (compare_files(initial_file_name, decoded_file_name) ? "success" : "fail") << std::endl;
     }
