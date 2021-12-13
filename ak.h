@@ -28,8 +28,8 @@ class A0FrequencyModel {
 public:
     vector<uint16_t> char_to_index = vector<uint16_t>(NUMBER_OF_CHARS);
     vector<uint16_t> index_to_symbol = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
-    vector<uint16_t> frequencies = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
-    vector<uint16_t> cumulative = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
+    vector<uint16_t> freq = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
+    vector<uint16_t> cum = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
 
     A0FrequencyModel() {
         for (size_t i = 0; i < NUMBER_OF_CHARS; ++i) {
@@ -37,67 +37,54 @@ public:
             index_to_symbol[i + 1] = i;
         }
         for (size_t i = 0; i <= NUMBER_OF_SYMBOLS; ++i) {
-            frequencies[i] = 1;
-            cumulative[i] = NUMBER_OF_SYMBOLS - i;
+            freq[i] = 1;
+            cum[i] = NUMBER_OF_SYMBOLS - i;
         }
-        frequencies[0] = 0;
+        freq[0] = 0;
     }
 
-    int getTotal() {
-        return cumulative[0];
-    }
-
-    int getLow(int symbolIndex) {
-        return cumulative[symbolIndex];
-    }
-
-    int getHigh(int symbolIndex) {
-        return cumulative[symbolIndex - 1];
-    }
-
-
-    void halveAllFrequenciesIfExceeded() {
-        if (getTotal() == MAX_FREQUENCY) {
-            int cum = 0;
+    void halve_all_frequencies_if_exceeded() {
+        if (cum[0] == MAX_FREQUENCY) {
+            int current_cum = 0;
             for (int i = NUMBER_OF_SYMBOLS; i >= 0; --i) {
-                frequencies[i] = (frequencies[i] + 1) / 2;
-                cumulative[i] = cum;
-                cum += frequencies[i];
+                freq[i] = (freq[i] + 1) / 2;
+                cum[i] = current_cum;
+                current_cum += freq[i];
             }
         }
     }
 
-    void update(int symbolIndex) {
-        halveAllFrequenciesIfExceeded();
-        int newSymbolIndex = updateSymbolIndexIfNeeded(symbolIndex);
-        updateFrequencies(newSymbolIndex);
+    void update(int symbol_index) {
+        halve_all_frequencies_if_exceeded();
+        int new_symbol_index = update_symbol_index_if_needed(symbol_index);
+        update_frequencies(new_symbol_index);
     }
 
-    int updateSymbolIndexIfNeeded(int symbolIndex) {
-        int newSymbolIndex = symbolIndex;
-        while (frequencies[newSymbolIndex] == frequencies[newSymbolIndex - 1]) {
-            newSymbolIndex--;
+    int update_symbol_index_if_needed(int symbol_index) {
+        int new_symbol_index = symbol_index;
+        while (freq[new_symbol_index] == freq[new_symbol_index - 1]) {
+            --new_symbol_index;
         }
 
-        if (newSymbolIndex < symbolIndex) {
-            int newChar = index_to_symbol[newSymbolIndex];
-            int oldChar = index_to_symbol[symbolIndex];
+        if (new_symbol_index < symbol_index) {
+            int newChar = index_to_symbol[new_symbol_index];
+            int oldChar = index_to_symbol[symbol_index];
 
-            index_to_symbol[newSymbolIndex] = oldChar;
-            index_to_symbol[symbolIndex] = newChar;
+            index_to_symbol[new_symbol_index] = oldChar;
+            index_to_symbol[symbol_index] = newChar;
 
-            char_to_index[newChar] = symbolIndex;
-            char_to_index[oldChar] = newSymbolIndex;
+            char_to_index[newChar] = symbol_index;
+            char_to_index[oldChar] = new_symbol_index;
         }
-        return newSymbolIndex;
+        return new_symbol_index;
     }
 
-    void updateFrequencies(int symbolIndex) {
-        frequencies[symbolIndex]++;
-        int indexToUpdate = symbolIndex;
-        while (indexToUpdate > 0) {
-            indexToUpdate--;
-            cumulative[indexToUpdate] += 1;
+    void update_frequencies(int symbol_index) {
+        ++freq[symbol_index];
+        int index_to_update = symbol_index;
+        while (index_to_update > 0) {
+            --index_to_update;
+            cum[index_to_update] += 1;
         }
     }
 };
@@ -111,40 +98,40 @@ public:
 
     std::vector<unsigned char> encoded_data = std::vector<unsigned char>(1);
     std::vector<unsigned char> initial_data;
-    A0FrequencyModel frequencyModel = A0FrequencyModel();
+    A0FrequencyModel frequency_model = A0FrequencyModel();
     int low = 0;
     int high = CODE_VALUE_MAX;
-    int bitsToFollow = 0;
+    int bits_to_follow = 0;
     size_t first_free_pos = 7;
 
 
-    void writeBitWithFollow(bool bit) {
+    void write_bit_with_follow(bool bit) {
         append_bit(encoded_data, first_free_pos, bit);
         int oppositeBit = bit == 0 ? 1 : 0;
-        while (bitsToFollow > 0) {
+        while (bits_to_follow > 0) {
             append_bit(encoded_data, first_free_pos, oppositeBit);
-            bitsToFollow--;
+            --bits_to_follow;
         }
     }
 
 
-    void encodeNext(int charIndex) {
+    void encode_next(int charIndex) {
         int range = high - low + 1;
-        int total = frequencyModel.getTotal();
-        int charLow = frequencyModel.getLow(charIndex);
-        int charHigh = frequencyModel.getHigh(charIndex);
+        int total = frequency_model.cum[0];
+        int charLow = frequency_model.cum[charIndex];
+        int charHigh = frequency_model.cum[charIndex - 1];
         high = low + range * charHigh / total - 1;
         low = low + range * charLow / total;
 
         while (true) {
             if (high < CODE_VALUE_HALF) {
-                writeBitWithFollow(0);
+                write_bit_with_follow(0);
             } else if (low >= CODE_VALUE_HALF) {
-                writeBitWithFollow(1);
+                write_bit_with_follow(1);
                 low -= CODE_VALUE_HALF;
                 high -= CODE_VALUE_HALF;
             } else if (low >= CODE_VALUE_FIRST_QUARTER && high < CODE_VALUE_THIRD_QUARTER) {
-                bitsToFollow++;
+                ++bits_to_follow;
                 low -= CODE_VALUE_FIRST_QUARTER;
                 high -= CODE_VALUE_FIRST_QUARTER;
             } else break;
@@ -153,18 +140,18 @@ public:
         }
     }
 
-    std::vector<unsigned char> writeEncoded() {
+    std::vector<unsigned char> write_encoded() {
         for (size_t i = 0; i < initial_data.size(); ++i) {
-            int charIndex = frequencyModel.char_to_index[initial_data[i]];
-            encodeNext(charIndex);
-            frequencyModel.update(charIndex);
+            int charIndex = frequency_model.char_to_index[initial_data[i]];
+            encode_next(charIndex);
+            frequency_model.update(charIndex);
         }
-        encodeNext(EOF_SYMBOL);
-        bitsToFollow++;
+        encode_next(EOF_SYMBOL);
+        ++bits_to_follow;
         if (low < CODE_VALUE_FIRST_QUARTER) {
-            writeBitWithFollow(0);
+            write_bit_with_follow(false);
         } else {
-            writeBitWithFollow(1);
+            write_bit_with_follow(true);
         }
         return encoded_data;
     }
@@ -175,78 +162,76 @@ public:
     explicit A0DecoderWriter(std::vector<unsigned char> encoded_data) {
         this->encoded_data = encoded_data;
         for (int i = 0; i < CODE_VALUE_BITS; ++i) {
-            moveToTheNextBit();
+            move_to_the_next_bit();
         }
     }
 
     std::vector<unsigned char> initial_data = std::vector<unsigned char>(1);
     std::vector<unsigned char> encoded_data;
-    A0FrequencyModel frequencyModel = A0FrequencyModel();
+    A0FrequencyModel frequency_model = A0FrequencyModel();
     uint16_t low = 0;
     uint16_t high = CODE_VALUE_MAX;
-    uint16_t codeValue = 0;
+    uint16_t code_value = 0;
 
     size_t byte_index = 0;
     size_t bit_index = 0;
     size_t first_free_pos = 7;
 
-    void moveToTheNextBit() {
+    void move_to_the_next_bit() {
         int nextBit = read_bit(encoded_data, byte_index, bit_index);
         if (nextBit == -1) {
-            std::cout << "LEL\n";
-            codeValue = 2 * codeValue;
+            code_value = 2 * code_value;
         } else {
-            codeValue = 2 * codeValue + nextBit;
+            code_value = 2 * code_value + nextBit;
         }
     }
 
-    int findSymbolIndex(int cum) {
-        int symbolIndex = 1;
-        while (frequencyModel.getLow(symbolIndex) > cum) {
-            symbolIndex++;
+    int find_symbol_index(int cum) {
+        int symbol_index = 1;
+        while (frequency_model.cum[symbol_index] > cum) {
+            ++symbol_index;
         }
-        return symbolIndex;
+        return symbol_index;
     }
 
-    int nextSymbolIndex() {
+    int next_symbol_index() {
         int range = high - low + 1;
-        int total = frequencyModel.getTotal();
-        int cum = ((codeValue - low + 1) * total - 1) / range;
+        int total = frequency_model.cum[0];
+        int cum = ((code_value - low + 1) * total - 1) / range;
 
-        int symbolIndex = findSymbolIndex(cum);
-        int symbolLow = frequencyModel.getLow(symbolIndex);
-        int symbolHigh = frequencyModel.getHigh(symbolIndex);
+        int symbolIndex = find_symbol_index(cum);
+        int symbolLow = frequency_model.cum[symbolIndex];
+        int symbolHigh = frequency_model.cum[symbolIndex - 1];
         high = low + range * symbolHigh / total - 1;
         low = low + range * symbolLow / total;
 
         while (true) {
             if (high < CODE_VALUE_HALF) {
-                // do nothing
             } else if (low >= CODE_VALUE_HALF) {
-                codeValue -= CODE_VALUE_HALF;
+                code_value -= CODE_VALUE_HALF;
                 low -= CODE_VALUE_HALF;
                 high -= CODE_VALUE_HALF;
             } else if (low >= CODE_VALUE_FIRST_QUARTER && high < CODE_VALUE_THIRD_QUARTER) {
-                codeValue -= CODE_VALUE_FIRST_QUARTER;
+                code_value -= CODE_VALUE_FIRST_QUARTER;
                 low -= CODE_VALUE_FIRST_QUARTER;
                 high -= CODE_VALUE_FIRST_QUARTER;
             } else break;
             low = 2 * low;
             high = 2 * high + 1;
-            moveToTheNextBit();
+            move_to_the_next_bit();
         }
 
         return symbolIndex;
     }
 
-    vector<unsigned char> writeDecoded() {
+    vector<unsigned char> write_decoded() {
         while (true) {
-            int symbolIndex = nextSymbolIndex();
-            if (symbolIndex == EOF_SYMBOL) break;
-            int charr = frequencyModel.index_to_symbol[symbolIndex];
+            int symbol_index = next_symbol_index();
+            if (symbol_index == EOF_SYMBOL) break;
+            int symbol = frequency_model.index_to_symbol[symbol_index];
 
-            append_byte(initial_data, first_free_pos, charr);
-            frequencyModel.update(symbolIndex);
+            append_byte(initial_data, first_free_pos, symbol);
+            frequency_model.update(symbol_index);
         }
         return initial_data;
     }
@@ -255,15 +240,15 @@ public:
 std::vector<unsigned char> ak_encode(
         const std::vector<unsigned char> &data
 ) {
-
     A0CoderWriter coder = A0CoderWriter(data);
-    return coder.writeEncoded();
+    std::vector<unsigned char> encoded_data = coder.write_encoded();
+    return encoded_data;
 }
 
 std::vector<unsigned char> ak_decode(
         const std::vector<unsigned char> &data
 ) {
-    std::vector<unsigned char> decoded_data;
     A0DecoderWriter decoder = A0DecoderWriter(data);
-    return decoder.writeDecoded();
+    std::vector<unsigned char> decoded_data = decoder.write_decoded();
+    return decoded_data;
 }
