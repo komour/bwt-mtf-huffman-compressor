@@ -196,8 +196,8 @@ void traverse(
     }
     std::vector<bool> left_codeword = code_word;
     std::vector<bool> right_codeword = code_word;
-    left_codeword.push_back(0);
-    right_codeword.push_back(1);
+    left_codeword.push_back(false);
+    right_codeword.push_back(true);
     traverse(root->left, left_codeword, code_words);
     traverse(root->right, right_codeword, code_words);
 }
@@ -742,7 +742,7 @@ int main(int argc, char *argv[]) {
     }
     std::string input_file = argv[1];
     std::string output_file = argv[2];
-    compress(input_file, output_file);
+    compress_ak(input_file, output_file);
 #endif
 #ifdef DECOMPRESS
     if (argc != 3) {
@@ -751,6 +751,6 @@ int main(int argc, char *argv[]) {
     }
     std::string input_file = argv[1];
     std::string output_file = argv[2];
-    decompress(input_file, output_file);
+    decompress_ak(input_file, output_file);
 #endif
 }

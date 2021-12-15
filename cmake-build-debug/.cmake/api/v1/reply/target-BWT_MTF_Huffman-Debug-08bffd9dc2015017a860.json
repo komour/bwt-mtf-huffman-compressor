@@ -35,7 +35,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-DFULL_PIPELINE -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.3.sdk"
+					"fragment" : "-DCOMPRESS -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.3.sdk"
 				},
 				{
 					"fragment" : "-std=gnu++2a"
@@ -62,7 +62,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-DFULL_PIPELINE -g",
+				"fragment" : "-DCOMPRESS -g",
 				"role" : "flags"
 			},
 			{

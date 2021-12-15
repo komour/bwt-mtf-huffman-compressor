@@ -1,1 +1,1 @@
-/Library/Developer/CommandLineTools/usr/bin/c++ -DFULL_PIPELINE -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.3.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/BWT_MTF_Huffman.dir/main.cpp.o -o BWT_MTF_Huffman 
+/Library/Developer/CommandLineTools/usr/bin/c++ -DCOMPRESS -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.3.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/BWT_MTF_Huffman.dir/main.cpp.o -o BWT_MTF_Huffman 
