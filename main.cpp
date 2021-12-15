@@ -1,13 +1,11 @@
 #include "debug_utilities.h"
 #include "io_utilities.h"
-#include "ak.h"
 
 #include <iostream>
 #include <vector>
 #include <numeric>
 #include <queue>
 #include <unordered_map>
-#include <map>
 
 const size_t BYTE_SIZE = 256;
 
@@ -354,6 +352,179 @@ void print_metrics(
         const size_t &initial_data,
         const size_t &encoded_data_size
 );
+
+const uint16_t END_OF_FILE = BYTE_SIZE + 1;
+const uint16_t MAX_CODE_VALUE = (1 << 16) - 1;
+const uint16_t QUARTER = MAX_CODE_VALUE / 4 + 1;
+
+std::vector<uint16_t> byte_to_index;
+std::vector<unsigned char> index_to_byte;
+std::vector<uint16_t> freq;
+std::vector<uint16_t> cumu;
+
+uint16_t left, right, code_value = 0;
+size_t byte_index_io, bit_index, first_free_pos = 0;
+uint8_t free_bits = 0;
+
+void update(uint16_t byte_index) {
+    if (cumu[0] == QUARTER - 1) {
+        uint16_t current_cumu = 0;
+        for (int i = BYTE_SIZE + 1; i >= 0; --i) {
+            cumu[i] = current_cumu;
+            ++freq[i];
+            freq[i] /= 2;
+            current_cumu += freq[i];
+        }
+    }
+    while (freq[byte_index] == freq[byte_index - 1]) {
+        --byte_index;
+    }
+    unsigned char new_byte = index_to_byte[byte_index];
+    unsigned char old_byte = index_to_byte[byte_index];
+    index_to_byte[byte_index] = old_byte;
+    index_to_byte[byte_index] = new_byte;
+    byte_to_index[new_byte] = byte_index;
+    byte_to_index[old_byte] = byte_index;
+    ++freq[byte_index];
+    while (byte_index) {
+        --byte_index;
+        ++cumu[byte_index];
+    }
+}
+
+void reset_state() {
+    left = 0;
+    right = MAX_CODE_VALUE;
+    code_value = 0;
+    byte_index_io = 0;
+    bit_index = 0;
+    free_bits = 0;
+    first_free_pos = 7;
+
+    byte_to_index = std::vector<uint16_t>(BYTE_SIZE);
+    index_to_byte = std::vector<unsigned char>(BYTE_SIZE + 1);
+    freq = std::vector<uint16_t>(BYTE_SIZE + 1);
+    cumu = std::vector<uint16_t>(BYTE_SIZE + 2);
+
+    for (size_t i = 0; i < BYTE_SIZE; ++i) {
+        byte_to_index[i] = i + 1;
+        index_to_byte[i + 1] = i;
+
+        freq[i] = i > 0 ? 1 : 0;
+        cumu[i] = BYTE_SIZE + 1 - i;
+    }
+    freq[BYTE_SIZE] = 1;
+    freq[BYTE_SIZE + 1] = 1;
+    cumu[BYTE_SIZE] = 1;
+}
+
+void write_bit_with_free_bits(
+        std::vector<unsigned char> &encoded_data,
+        const bool &bit
+) {
+    append_bit(encoded_data, first_free_pos, bit);
+    while (free_bits) {
+        --free_bits;
+        append_bit(encoded_data, first_free_pos, !bit);
+    }
+}
+
+void encode_next_byte(
+        const uint16_t &byte_index,
+        std::vector<unsigned char> &encoded_data
+) {
+    uint32_t range = 1 + right - left;
+    right = left + range * cumu[byte_index - 1] / cumu[0] - 1;
+    left = left + range * cumu[byte_index] / cumu[0];
+    for (;;) {
+        if (right < 2 * QUARTER) {
+            write_bit_with_free_bits(encoded_data, false);
+        } else if (left >= 2 * QUARTER) {
+            write_bit_with_free_bits(encoded_data, true);
+            left -= 2 * QUARTER;
+            right -= 2 * QUARTER;
+        } else if (left >= QUARTER && right < 3 * QUARTER) {
+            ++free_bits;
+            left -= QUARTER;
+            right -= QUARTER;
+        } else {
+            break;
+        }
+        left *= 2; right *= 2; ++right;
+    }
+}
+
+std::vector<unsigned char> aak_encode(
+        const std::vector<unsigned char> &initial_data
+) {
+    reset_state();
+    std::vector<unsigned char> encoded_data = std::vector<unsigned char>(1);
+    for (unsigned char byte: initial_data) {
+        uint16_t byte_index = byte_to_index[byte];
+        encode_next_byte(byte_index, encoded_data);
+        update(byte_index);
+    }
+    encode_next_byte(END_OF_FILE, encoded_data);
+    ++free_bits;
+    bool last_bit = left < QUARTER ? last_bit = false : last_bit = true;
+    write_bit_with_free_bits(encoded_data, last_bit);
+    return encoded_data;
+}
+
+uint16_t next_byte_index(
+        const std::vector<unsigned char> &encoded_data
+) {
+    uint32_t range = 1 + right - left;
+    uint16_t byte_index = 1;
+    while (cumu[byte_index] > ((code_value - left + 1) * cumu[0] - 1) / range) {
+        ++byte_index;
+    }
+    right = left + range * cumu[byte_index - 1] / cumu[0] - 1;
+    left += range * cumu[byte_index] / cumu[0];
+    for (;;) {
+        if (right < 2 * QUARTER) {
+        } else if (left >= 2 * QUARTER) {
+            code_value -= 2 * QUARTER;
+            left -= 2 * QUARTER;
+            right -= 2 * QUARTER;
+        } else if (left >= QUARTER && right < 3 * QUARTER) {
+            code_value -= QUARTER;
+            left -= QUARTER;
+            right -= QUARTER;
+        } else {
+            break;
+        }
+        left *= 2;
+        right *= 2;
+        ++right;
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
+        code_value *= 2;
+        code_value += next_bit;
+    }
+    return byte_index;
+}
+
+std::vector<unsigned char> aak_decode(
+        const std::vector<unsigned char> &encoded_data
+) {
+    reset_state();
+    std::vector<unsigned char> initial_data = std::vector<unsigned char>(1);
+    for (size_t i = 0; i < 16; ++i) {
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
+        code_value *= 2;
+        code_value += next_bit;
+    }
+    for (;;) {
+        uint16_t byte_index = next_byte_index(encoded_data);
+        if (byte_index == END_OF_FILE) {
+            break;
+        }
+        unsigned char byte = index_to_byte[byte_index];
+        append_byte(initial_data, first_free_pos, byte);
+        update(byte_index);
+    }
+    return initial_data;
+}
 
 void compress(
         const std::string &initial_file_name,

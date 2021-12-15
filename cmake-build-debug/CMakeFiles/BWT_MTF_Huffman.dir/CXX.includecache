@@ -6,18 +6,6 @@
 
 #IncludeRegexTransform: 
 
-/Users/asap/CLionProjects/BWT-MTF-Huffman/ak.h
-fstream
--
-iostream
--
-unordered_map
--
-vector
--
-io_utilities.h
-/Users/asap/CLionProjects/BWT-MTF-Huffman/io_utilities.h
-
 /Users/asap/CLionProjects/BWT-MTF-Huffman/debug_utilities.h
 fstream
 -
@@ -41,8 +29,6 @@ debug_utilities.h
 /Users/asap/CLionProjects/BWT-MTF-Huffman/debug_utilities.h
 io_utilities.h
 /Users/asap/CLionProjects/BWT-MTF-Huffman/io_utilities.h
-ak.h
-/Users/asap/CLionProjects/BWT-MTF-Huffman/ak.h
 iostream
 -
 vector
@@ -52,7 +38,5 @@ numeric
 queue
 -
 unordered_map
--
-map
 -
 
