@@ -90,7 +90,8 @@ read_bytes_ak(
 }
 
 bool get_bit(unsigned char byte, size_t bit_number) {
-    return byte & (1 << (bit_number - 1));
+    auto ans = byte & (1 << (bit_number - 1));
+    return ans;
 }
 
 bool read_bit(
@@ -101,6 +102,9 @@ bool read_bit(
     if (bit_index == 8) {
         ++byte_index;
         bit_index = 0;
+    }
+    if (byte_index >= data.size()) {
+        return false;
     }
     auto byte = data[byte_index];
     return get_bit(byte, 8 - bit_index++);

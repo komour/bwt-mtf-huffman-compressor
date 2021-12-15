@@ -6,6 +6,7 @@
 #include <numeric>
 #include <queue>
 #include <unordered_map>
+#include <map>
 
 const size_t BYTE_SIZE = 256;
 
@@ -402,8 +403,8 @@ void reset_state() {
     first_free_pos = 7;
 
     byte_to_index = std::vector<uint16_t>(BYTE_SIZE);
-    index_to_byte = std::vector<unsigned char>(BYTE_SIZE + 1);
-    freq = std::vector<uint16_t>(BYTE_SIZE + 1);
+    index_to_byte = std::vector<unsigned char>(BYTE_SIZE + 2);
+    freq = std::vector<uint16_t>(BYTE_SIZE + 2);
     cumu = std::vector<uint16_t>(BYTE_SIZE + 2);
 
     for (size_t i = 0; i < BYTE_SIZE; ++i) {
@@ -472,7 +473,8 @@ std::vector<unsigned char> aak_encode(
 }
 
 uint16_t next_byte_index(
-        const std::vector<unsigned char> &encoded_data
+        const std::vector<unsigned char> &encoded_data,
+        size_t &bit_index_io
 ) {
     uint32_t range = 1 + right - left;
     uint16_t byte_index = 1;
@@ -497,7 +499,10 @@ uint16_t next_byte_index(
         left *= 2;
         right *= 2;
         ++right;
-        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index_io);
+        if (byte_index_io >= encoded_data.size()) {
+            break;
+        }
         code_value *= 2;
         code_value += next_bit;
     }
@@ -508,14 +513,15 @@ std::vector<unsigned char> aak_decode(
         const std::vector<unsigned char> &encoded_data
 ) {
     reset_state();
+    size_t bit_index_io = 0;
     std::vector<unsigned char> initial_data = std::vector<unsigned char>(1);
     for (size_t i = 0; i < 16; ++i) {
-        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index_io);
         code_value *= 2;
         code_value += next_bit;
     }
     for (;;) {
-        uint16_t byte_index = next_byte_index(encoded_data);
+        uint16_t byte_index = next_byte_index(encoded_data, bit_index_io);
         if (byte_index == END_OF_FILE) {
             break;
         }
@@ -661,14 +667,14 @@ void print2D(BTree *root) {
     print2DUtil(root, 0);
 }
 
-double stat = 0;
+double compression_rate = 0;
 
 void print_metrics(
         const std::string &output_file,
         const size_t &initial_data_size,
         const size_t &encoded_data_size
 ) {
-    stat += (double(encoded_data_size)) / (double(initial_data_size));
+    compression_rate += (double(encoded_data_size)) / (double(initial_data_size));
     std::cout << "file_name: " << output_file
               << " $$ initial_data_size: " << initial_data_size
               << " $$ encoded_file_size: " << encoded_data_size
@@ -688,6 +694,7 @@ int main(int argc, char *argv[]) {
                                           "girl30.jpg", "lena30.jpg", "monarch30.jpg",
                                           "peppers30.jpg", "pool30.jpg", "sails30.jpg", "serrano30.jpg",
                                           "tulips30.jpg", "watch30.jpg"};
+
 //    std::string dir = "jpeg80/";
 //    std::vector<std::string> file_list = {"airplane80.jpg", "arctichare80.jpg", "baboon80.jpg",
 //                                          "cat80.jpg", "fruits80.jpg", "frymire80.jpg",
@@ -698,7 +705,6 @@ int main(int argc, char *argv[]) {
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
     size_t counter = 1;
-
 //    testing
 //    std::string test_string = "abacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaacabaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 //    std::vector<unsigned char> bytes_input;
@@ -733,7 +739,7 @@ int main(int argc, char *argv[]) {
         all_tests_passed &= operation_succeeded;
         std::cout << (operation_succeeded ? "success" : "fail") << std::endl;
     }
-    std::cout << (all_tests_passed ? "✅ all tests passed 😮‍💨" : "‼️ tests failed ❌") << " $$ compression rate = " << stat / 15 << '\n';
+    std::cout << (all_tests_passed ? "done, all tests passed " : "!!️ tests failed !!") << " $$ compression rate = " << compression_rate / 15 << '\n';
 #endif
 #ifdef COMPRESS
     if (argc != 3) {
