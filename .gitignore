@@ -75,3 +75,7 @@ crashlytics-build.properties
 fabric.properties
 
 .DS_Store
+
+# processed files
+*.bzap
+*.decoded

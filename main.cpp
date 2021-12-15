@@ -431,7 +431,7 @@ void compress_ak(
     auto mtf_data = move_to_front(bwt_data);
     auto encoded_rle = rle_encode(mtf_data);
 
-    auto ak_data = ak_encode(encoded_rle);
+    auto ak_data = aak_encode(encoded_rle);
 
     size_t encoded_data_size = sizeof(size_t);
     std::cout << "header size: " << double(encoded_data_size) << " $$ ";
@@ -462,7 +462,7 @@ void decompress_ak(
     } else {
         const auto &[encoded_ak, bwt_shift_position] = read_bytes_ak(
                 encoded_file_name, true);
-        auto decoded_ak = ak_decode(encoded_ak);
+        auto decoded_ak = aak_decode(encoded_ak);
         auto decoded_rle = rle_decode(decoded_ak);
         auto decoded_mtf = move_to_front_reverse(decoded_rle);
         auto decoded_data = bwt_reverse(decoded_mtf, bwt_shift_position);
@@ -537,10 +537,10 @@ int main(int argc, char *argv[]) {
 //    const auto &[bytes_input, dummy1, dummy2, dummy3] = read_bytes("jpeg30/pool30.jpg");
 //    print_vector(bytes_input);
 //    std::cout << std::endl;
-//    auto encoded = ak_encode(bytes_input);
+//    auto encoded = aak_encode(bytes_input);
 //    print_vector(encoded);
 //    std::cout << std::endl;
-//    auto decoded = ak_decode(encoded);
+//    auto decoded = aak_decode(encoded);
 //    print_vector(decoded);
 //    std::cout << std::endl;
 //    std::cout << bytes_input.size() << " " << encoded.size() << " " << decoded.size() << std::endl;

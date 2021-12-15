@@ -11,236 +11,213 @@
 
 #include "io_utilities.h"
 
-using namespace std;
-
 const uint16_t NUMBER_OF_CHARS = 256;
-const uint16_t CODE_VALUE_BITS = 16;
-const uint16_t CODE_VALUE_MAX = (1 << CODE_VALUE_BITS) - 1;
-const uint16_t CODE_VALUE_FIRST_QUARTER = CODE_VALUE_MAX / 4 + 1;
-const uint16_t CODE_VALUE_HALF = 2 * CODE_VALUE_FIRST_QUARTER;
-const uint16_t CODE_VALUE_THIRD_QUARTER = 3 * CODE_VALUE_FIRST_QUARTER;
-const uint16_t MAX_FREQUENCY = CODE_VALUE_FIRST_QUARTER - 1;
-const uint16_t EOF_SYMBOL = NUMBER_OF_CHARS + 1;
-const uint16_t NUMBER_OF_SYMBOLS = NUMBER_OF_CHARS + 1;
+const uint16_t END_OF_FILE = NUMBER_OF_CHARS + 1;
+const uint16_t MAX_CODE_VALUE = (1 << 16) - 1;
+const uint16_t QUARTER = MAX_CODE_VALUE / 4 + 1;
 
+std::vector<uint16_t> byte_to_index;
+std::vector<unsigned char> index_to_byte;
+std::vector<uint16_t> freq;
+std::vector<uint16_t> cumu;
 
-class FrequencyModel {
-public:
-    vector<uint16_t> symbol_to_index = vector<uint16_t>(NUMBER_OF_CHARS);
-    vector<uint16_t> index_to_symbol = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
-    vector<uint16_t> freq = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
-    vector<uint16_t> cum = vector<uint16_t>(NUMBER_OF_SYMBOLS + 1);
-
-    FrequencyModel() {
-        for (size_t i = 0; i < NUMBER_OF_CHARS; ++i) {
-            symbol_to_index[i] = i + 1;
-            index_to_symbol[i + 1] = i;
-        }
-        for (size_t i = 0; i <= NUMBER_OF_SYMBOLS; ++i) {
-            freq[i] = 1;
-            cum[i] = NUMBER_OF_SYMBOLS - i;
-        }
-        freq[0] = 0;
-    }
-
-    void halve_all_frequencies_if_exceeded() {
-        if (cum[0] == MAX_FREQUENCY) {
-            uint16_t current_cum = 0;
-            for (int i = NUMBER_OF_SYMBOLS; i >= 0; --i) {
-                freq[i] = (freq[i] + 1) / 2;
-                cum[i] = current_cum;
-                current_cum += freq[i];
-            }
+void update(uint16_t byte_index) {
+    if (cumu[0] == QUARTER - 1) {
+        uint16_t current_cum = 0;
+        for (int i = NUMBER_OF_CHARS + 1; i >= 0; --i) {
+            freq[i] = (freq[i] + 1) / 2;
+            cumu[i] = current_cum;
+            current_cum += freq[i];
         }
     }
-
-    void update(uint16_t symbol_index) {
-        halve_all_frequencies_if_exceeded();
-        uint16_t new_symbol_index = update_symbol_index_if_needed(symbol_index);
-        update_frequencies(new_symbol_index);
+    uint16_t new_byte_index = byte_index;
+    while (freq[new_byte_index] == freq[new_byte_index - 1]) {
+        --new_byte_index;
     }
 
-    uint16_t update_symbol_index_if_needed(uint16_t symbol_index) {
-        uint16_t new_symbol_index = symbol_index;
-        while (freq[new_symbol_index] == freq[new_symbol_index - 1]) {
-            --new_symbol_index;
-        }
+    if (new_byte_index < byte_index) {
+        unsigned char new_byte = index_to_byte[new_byte_index];
+        unsigned char old_byte = index_to_byte[byte_index];
 
-        if (new_symbol_index < symbol_index) {
-            uint16_t new_symbol = index_to_symbol[new_symbol_index];
-            uint16_t old_symbol = index_to_symbol[symbol_index];
+        index_to_byte[new_byte_index] = old_byte;
+        index_to_byte[byte_index] = new_byte;
 
-            index_to_symbol[new_symbol_index] = old_symbol;
-            index_to_symbol[symbol_index] = new_symbol;
-
-            symbol_to_index[new_symbol] = symbol_index;
-            symbol_to_index[old_symbol] = new_symbol_index;
-        }
-        return new_symbol_index;
+        byte_to_index[new_byte] = byte_index;
+        byte_to_index[old_byte] = new_byte_index;
     }
 
-    void update_frequencies(uint16_t symbol_index) {
-        ++freq[symbol_index];
-        uint16_t index_to_update = symbol_index;
-        while (index_to_update) {
-            --index_to_update;
-            cum[index_to_update] += 1;
-        }
+    ++freq[new_byte_index];
+    uint16_t index_to_update = new_byte_index;
+    while (index_to_update) {
+        --index_to_update;
+        cumu[index_to_update] += 1;
     }
-};
+}
 
-void write_bit_with_follow(
+void init_frequency() {
+    byte_to_index = std::vector<uint16_t>(NUMBER_OF_CHARS);
+    index_to_byte = std::vector<unsigned char>(NUMBER_OF_CHARS + 1 + 1);
+    freq = std::vector<uint16_t>(NUMBER_OF_CHARS + 1 + 1);
+    cumu = std::vector<uint16_t>(NUMBER_OF_CHARS + 1 + 1);
+
+
+    for (size_t i = 0; i < NUMBER_OF_CHARS; ++i) {
+        index_to_byte[i + 1] = i;
+        byte_to_index[i] = i + 1;
+
+        freq[i] = 1;
+        cumu[i] = NUMBER_OF_CHARS + 1 - i;
+    }
+    freq[NUMBER_OF_CHARS] = 1;
+    freq[NUMBER_OF_CHARS + 1] = 1;
+    cumu[NUMBER_OF_CHARS] = 1;
+    cumu[NUMBER_OF_CHARS + 1] = 0;
+
+    freq[0] = 0;
+}
+
+void write_bit_with_free_bits(
         std::vector<unsigned char> &encoded_data,
         const bool &bit,
         size_t &first_free_pos,
-        uint16_t &bits_to_follow
+        uint16_t &free_bits
 ) {
     append_bit(encoded_data, first_free_pos, bit);
     bool oppositeBit = !bit;
-    while (bits_to_follow) {
+    while (free_bits) {
         append_bit(encoded_data, first_free_pos, oppositeBit);
-        --bits_to_follow;
+        --free_bits;
     }
 }
 
-void encode_next(
-        const uint16_t &symbol_index,
-        FrequencyModel &frequency_model,
-        uint16_t &high,
-        uint16_t &low,
+void encode_next_byte(
+        const uint16_t &byte_index,
+        uint16_t &right,
+        uint16_t &left,
         std::vector<unsigned char> &encoded_data,
         size_t &first_free_pos,
-        uint16_t &bits_to_follow
+        uint16_t &free_bits
 ) {
-    uint32_t range = 1 + high - low;
-    uint16_t total = frequency_model.cum[0];
-    uint16_t symbol_low = frequency_model.cum[symbol_index];
-    uint16_t symbol_high = frequency_model.cum[symbol_index - 1];
-    high = low + range * symbol_high / total - 1;
-    low = low + range * symbol_low / total;
+    uint32_t range = 1 + right - left;
+    uint16_t total = cumu[0];
+    uint16_t byte_left = cumu[byte_index];
+    uint16_t byte_right = cumu[byte_index - 1];
+    right = left + range * byte_right / total - 1;
+    left = left + range * byte_left / total;
 
     for (;;) {
-        if (high < CODE_VALUE_HALF) {
-            write_bit_with_follow(encoded_data, false, first_free_pos, bits_to_follow);
-        } else if (low >= CODE_VALUE_HALF) {
-            write_bit_with_follow(encoded_data, true, first_free_pos, bits_to_follow);
-            low -= CODE_VALUE_HALF;
-            high -= CODE_VALUE_HALF;
-        } else if (low >= CODE_VALUE_FIRST_QUARTER && high < CODE_VALUE_THIRD_QUARTER) {
-            ++bits_to_follow;
-            low -= CODE_VALUE_FIRST_QUARTER;
-            high -= CODE_VALUE_FIRST_QUARTER;
+        if (right < 2 * QUARTER) {
+            write_bit_with_free_bits(encoded_data, false, first_free_pos, free_bits);
+        } else if (left >= 2 * QUARTER) {
+            write_bit_with_free_bits(encoded_data, true, first_free_pos, free_bits);
+            left -= 2 * QUARTER;
+            right -= 2 * QUARTER;
+        } else if (left >= QUARTER && right < 3 * QUARTER) {
+            ++free_bits;
+            left -= QUARTER;
+            right -= QUARTER;
         } else break;
-        low = 2 * low;
-        high = 2 * high + 1;
+        left = 2 * left;
+        right = 2 * right + 1;
     }
 }
 
-std::vector<unsigned char> ak_encode(
+std::vector<unsigned char> aak_encode(
         const std::vector<unsigned char> &initial_data
 ) {
+    init_frequency();
     std::vector<unsigned char> encoded_data = std::vector<unsigned char>(1);
-    FrequencyModel frequency_model = FrequencyModel();
-    uint16_t low = 0;
-    uint16_t high = CODE_VALUE_MAX;
-    uint16_t bits_to_follow = 0;
+    uint16_t left = 0;
+    uint16_t right = MAX_CODE_VALUE;
+    uint16_t free_bits = 0;
     size_t first_free_pos = 7;
 
     for (unsigned char byte: initial_data) {
-        uint16_t symbol_index = frequency_model.symbol_to_index[byte];
-        encode_next(symbol_index, frequency_model, high, low, encoded_data, first_free_pos, bits_to_follow);
-        frequency_model.update(symbol_index);
+        uint16_t byte_index = byte_to_index[byte];
+        encode_next_byte(byte_index, right, left, encoded_data, first_free_pos, free_bits);
+        update(byte_index);
     }
-    encode_next(EOF_SYMBOL, frequency_model, high, low, encoded_data, first_free_pos, bits_to_follow);
-    ++bits_to_follow;
+    encode_next_byte(END_OF_FILE, right, left, encoded_data, first_free_pos, free_bits);
+    ++free_bits;
 
     bool last_bit;
-    low < CODE_VALUE_FIRST_QUARTER ? last_bit = false : last_bit = true;
-    write_bit_with_follow(encoded_data, last_bit, first_free_pos, bits_to_follow);
+    left < QUARTER ? last_bit = false : last_bit = true;
+    write_bit_with_free_bits(encoded_data, last_bit, first_free_pos, free_bits);
     return encoded_data;
 }
 
-uint16_t next_symbol_index(
-        const FrequencyModel &frequency_model,
-        uint16_t &low,
-        uint16_t &high,
+uint16_t next_byte_index(
+        uint16_t &left,
+        uint16_t &right,
         uint16_t &code_value,
-        size_t &byte_index,
+        size_t &byte_index_io,
         size_t &bit_index,
         const std::vector<unsigned char> &encoded_data
 ) {
-    uint32_t range = high - low + 1;
-    uint16_t total = frequency_model.cum[0];
-    uint16_t cum = ((code_value - low + 1) * total - 1) / range;
+    uint32_t range = right - left + 1;
+    uint16_t total = cumu[0];
 
-    uint16_t symbol_index = 1;
-    while (frequency_model.cum[symbol_index] > cum) {
-        ++symbol_index;
+    uint16_t byte_index = 1;
+    while (cumu[byte_index] > ((code_value - left + 1) * total - 1) / range) {
+        ++byte_index;
     }
 
-    uint16_t symbol_low = frequency_model.cum[symbol_index];
-    uint16_t symbol_high = frequency_model.cum[symbol_index - 1];
-    high = low + range * symbol_high / total - 1;
-    low = low + range * symbol_low / total;
+    uint16_t byte_left = cumu[byte_index];
+    uint16_t byte_right = cumu[byte_index - 1];
+    right = left + range * byte_right / total - 1;
+    left = left + range * byte_left / total;
 
     for (;;) {
-        if (high < CODE_VALUE_HALF) {
-        } else if (low >= CODE_VALUE_HALF) {
-            code_value -= CODE_VALUE_HALF;
-            low -= CODE_VALUE_HALF;
-            high -= CODE_VALUE_HALF;
-        } else if (low >= CODE_VALUE_FIRST_QUARTER && high < CODE_VALUE_THIRD_QUARTER) {
-            code_value -= CODE_VALUE_FIRST_QUARTER;
-            low -= CODE_VALUE_FIRST_QUARTER;
-            high -= CODE_VALUE_FIRST_QUARTER;
+        if (right < 2 * QUARTER) {
+        } else if (left >= 2 * QUARTER) {
+            code_value -= 2 * QUARTER;
+            left -= 2 * QUARTER;
+            right -= 2 * QUARTER;
+        } else if (left >= QUARTER && right < 3 * QUARTER) {
+            code_value -= QUARTER;
+            left -= QUARTER;
+            right -= QUARTER;
         } else {
             break;
         }
-        low *= 2;
-        high *= 2;
-        ++high;
-        bool next_bit = read_bit(encoded_data, byte_index, bit_index);
+        left *= 2;
+        right *= 2;
+        ++right;
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
         code_value *= 2;
         code_value += next_bit;
     }
 
-    return symbol_index;
+    return byte_index;
 }
 
-std::vector<unsigned char> ak_decode(
+std::vector<unsigned char> aak_decode(
         const std::vector<unsigned char> &encoded_data
 ) {
+    init_frequency();
     std::vector<unsigned char> initial_data = std::vector<unsigned char>(1);
-    FrequencyModel frequency_model = FrequencyModel();
-    uint16_t low = 0;
-    uint16_t high = CODE_VALUE_MAX;
+    uint16_t left = 0;
+    uint16_t right = MAX_CODE_VALUE;
     uint16_t code_value = 0;
 
-    size_t byte_index = 0;
+    size_t byte_index_io = 0;
     size_t bit_index = 0;
     size_t first_free_pos = 7;
 
-    for (size_t i = 0; i < CODE_VALUE_BITS; ++i) {
-        bool next_bit = read_bit(encoded_data, byte_index, bit_index);
+    for (size_t i = 0; i < 16; ++i) {
+        bool next_bit = read_bit(encoded_data, byte_index_io, bit_index);
         code_value *= 2;
         code_value += next_bit;
     }
 
     for (;;) {
-        uint16_t symbol_index = next_symbol_index(
-                frequency_model,
-                low,
-                high,
-                code_value,
-                byte_index,
-                bit_index,
-                encoded_data);
-        if (symbol_index == EOF_SYMBOL) {
+        uint16_t byte_index = next_byte_index(left, right, code_value, byte_index_io, bit_index, encoded_data);
+        if (byte_index == END_OF_FILE) {
             break;
         }
-        uint16_t symbol = frequency_model.index_to_symbol[symbol_index];
-        append_byte(initial_data, first_free_pos, symbol);
-        frequency_model.update(symbol_index);
+        unsigned char byte = index_to_byte[byte_index];
+        append_byte(initial_data, first_free_pos, byte);
+        update(byte_index);
     }
     return initial_data;
 }
