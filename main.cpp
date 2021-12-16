@@ -668,12 +668,17 @@ void print2D(BTree *root) {
 }
 
 double compression_rate = 0;
+uint32_t initial_data_size_sum = 0;
+uint32_t encoded_data_size_sum = 0;
 
 void print_metrics(
         const std::string &output_file,
         const size_t &initial_data_size,
         const size_t &encoded_data_size
 ) {
+    initial_data_size_sum += initial_data_size;
+    encoded_data_size_sum += encoded_data_size;
+
     compression_rate += (double(encoded_data_size)) / (double(initial_data_size));
     std::cout << "file_name: " << output_file
               << " $$ initial_data_size: " << initial_data_size
@@ -688,19 +693,19 @@ int main(int argc, char *argv[]) {
 //    std::string dir = "calgarycorpus/";
 //    std::vector<std::string> file_list = {"bib", "book1", "book2", "geo", "news", "obj1", "obj2", "paper1", "paper2",
 //                                          "pic", "progc", "progl", "progp", "trans"};
-    std::string dir = "jpeg30/";
-    std::vector<std::string> file_list = {"airplane30.jpg", "arctichare30.jpg", "baboon30.jpg",
-                                          "cat30.jpg", "fruits30.jpg", "frymire30.jpg",
-                                          "girl30.jpg", "lena30.jpg", "monarch30.jpg",
-                                          "peppers30.jpg", "pool30.jpg", "sails30.jpg", "serrano30.jpg",
-                                          "tulips30.jpg", "watch30.jpg"};
+//    std::string dir = "jpeg30/";
+//    std::vector<std::string> file_list = {"airplane30.jpg", "arctichare30.jpg", "baboon30.jpg",
+//                                          "cat30.jpg", "fruits30.jpg", "frymire30.jpg",
+//                                          "girl30.jpg", "lena30.jpg", "monarch30.jpg",
+//                                          "peppers30.jpg", "pool30.jpg", "sails30.jpg", "serrano30.jpg",
+//                                          "tulips30.jpg", "watch30.jpg"};
 
-//    std::string dir = "jpeg80/";
-//    std::vector<std::string> file_list = {"airplane80.jpg", "arctichare80.jpg", "baboon80.jpg",
-//                                          "cat80.jpg", "fruits80.jpg", "frymire80.jpg",
-//                                          "girl80.jpg", "lena80.jpg", "monarch80.jpg",
-//                                          "peppers80.jpg", "pool80.jpg", "sails80.jpg", "serrano80.jpg",
-//                                          "tulips80.jpg", "watch80.jpg"};
+    std::string dir = "jpeg80/";
+    std::vector<std::string> file_list = {"airplane80.jpg", "arctichare80.jpg", "baboon80.jpg",
+                                          "cat80.jpg", "fruits80.jpg", "frymire80.jpg",
+                                          "girl80.jpg", "lena80.jpg", "monarch80.jpg",
+                                          "peppers80.jpg", "pool80.jpg", "sails80.jpg", "serrano80.jpg",
+                                          "tulips80.jpg", "watch80.jpg"};
 
     std::string encoding_suffix = ".bzap";
     std::string decoding_suffix = ".decoded";
@@ -740,6 +745,9 @@ int main(int argc, char *argv[]) {
         std::cout << (operation_succeeded ? "success" : "fail") << std::endl;
     }
     std::cout << (all_tests_passed ? "done, all tests passed " : "!!️ tests failed !!") << " $$ compression rate = " << compression_rate / 15 << '\n';
+    std::cout << "encoded_data_size_sum = " << encoded_data_size_sum << '\n';
+    std::cout << "initial_data_size_sum = " << initial_data_size_sum << '\n';
+    std::cout << "rate = " << (1 - (double) encoded_data_size_sum / (double) initial_data_size_sum) * 100;
 #endif
 #ifdef COMPRESS
     if (argc != 3) {
